@@ -45,7 +45,7 @@ from vllm_patch.latency_utils import (
 # ---------------------------------------------------------------------------
 
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
-PROXY_HOST = os.getenv("PROXY_HOST", "0.0.0.0")
+PROXY_HOST = os.getenv("PROXY_HOST", "0.0.0.0")  # nosec B104 - container ingress requires 0.0.0.0
 PROXY_PORT = int(os.getenv("PROXY_PORT", "8080"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 STATS_WINDOW = int(os.getenv("STATS_WINDOW", "1000"))
