@@ -24,9 +24,7 @@
 #   docker-compose logs -f proxy
 #
 #   # Stop:
-#   docker-compose down
-
-version: "3.9"
+#   docker compose -f docker/docker-compose.yml up -d
 
 networks:
   vllm-net:
@@ -75,7 +73,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 120s    # model loading takes time
+      start_period: 300s
+      start_interval: 15s
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -93,7 +92,7 @@ services:
       - LOG_LEVEL=INFO
       - STATS_WINDOW=1000
     ports:
-      - "${PROXY_PORT:-8080}:8080"
+      - "${PROXY_PORT:-8082}:8080"
     networks:
       - vllm-net
     depends_on:
@@ -120,6 +119,7 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
@@ -130,6 +130,23 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager — Alert routing
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    networks:
+      - vllm-net
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--web.external-url=http://localhost:9093"
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------

@@ -55,7 +55,7 @@ proxy:
   enabled: true
   replicaCount: 2
   image:
-    repository: ghcr.io/your-username/vllm-latency-proxy
+    repository: ghcr.io/ArchanaChetan07/vllm-latency-proxy
     tag: "1.2.0"
     pullPolicy: IfNotPresent
   port: 8080
@@ -78,10 +78,14 @@ proxy:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 80
-  podDisruptionBudget:
-    enabled: true
-    minAvailable: 1
   extraEnv: {}
+
+networkPolicy:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 
 # ---------------------------------------------------------------------------
 # OpenTelemetry
@@ -105,6 +109,12 @@ prometheus:
   retention: 30d
   service:
     port: 9090
+  alertmanager:
+    enabled: false
+    image: prom/alertmanager:v0.27.0
+    service:
+      port: 9093
+  extraScrapeTargets: []
 
 grafana:
   enabled: false

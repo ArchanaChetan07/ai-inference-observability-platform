@@ -40,8 +40,8 @@ kubectl create secret generic hf-token \
   -n vllm
 
 # 2. Build and push proxy image (or use pre-built)
-docker build -f docker/Dockerfile -t ghcr.io/your-username/vllm-latency-proxy:1.2.0 .
-docker push ghcr.io/your-username/vllm-latency-proxy:1.2.0
+docker build -f docker/Dockerfile -t ghcr.io/ArchanaChetan07/vllm-latency-proxy:1.2.0 .
+docker push ghcr.io/ArchanaChetan07/vllm-latency-proxy:1.2.0
 
 # 3. Update proxy image in k8s/proxy-deployment.yaml if needed
 

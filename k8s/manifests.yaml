@@ -202,7 +202,7 @@ spec:
     spec:
       containers:
         - name: proxy
-          image: ghcr.io/your-username/vllm-latency-proxy:latest
+          image: ghcr.io/ArchanaChetan07/vllm-latency-proxy:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

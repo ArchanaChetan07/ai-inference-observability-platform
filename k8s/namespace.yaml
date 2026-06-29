@@ -5,3 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: vllm-latency-metrics
     app.kubernetes.io/managed-by: kubectl
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

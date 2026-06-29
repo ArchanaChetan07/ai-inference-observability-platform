@@ -5,12 +5,14 @@ namespace: vllm
 
 resources:
   - namespace.yaml
+  - serviceaccount.yaml
   - configmap.yaml
   - pvc.yaml
   - vllm-deployment.yaml
   - vllm-service.yaml
   - proxy-deployment.yaml
   - proxy-service.yaml
+  - networkpolicy.yaml
   - hpa.yaml
   - pdb.yaml
 

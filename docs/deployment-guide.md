@@ -25,7 +25,7 @@ kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_... -n vllm
 helm install latency-metrics ./helm \
   -n vllm \
   --set vllm.model=facebook/opt-1.3b \
-  --set proxy.image.repository=ghcr.io/your-username/vllm-latency-proxy \
+  --set proxy.image.repository=ghcr.io/ArchanaChetan07/vllm-latency-proxy \
   --set proxy.image.tag=1.2.0
 
 helm status latency-metrics -n vllm

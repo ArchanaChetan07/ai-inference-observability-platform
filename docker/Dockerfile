@@ -40,7 +40,8 @@ FROM python:3.11-slim AS runtime
 
 LABEL org.opencontainers.image.title="vLLM Latency Metrics Proxy"
 LABEL org.opencontainers.image.description="Project 1A: TTFT/TBT metrics proxy for vLLM"
-LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.version="1.2.0"
+LABEL org.opencontainers.image.source="https://github.com/ArchanaChetan07/ai-inference-observability-platform"
 
 WORKDIR /app
 

@@ -9,12 +9,38 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
+      evaluation_interval: 15s
+    {{- if .Values.prometheus.alertmanager.enabled }}
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - {{ include "vllm-latency-metrics.fullname" . }}-alertmanager:{{ .Values.prometheus.alertmanager.service.port }}
+    {{- end }}
     scrape_configs:
+      {{- if .Values.proxy.enabled }}
       - job_name: vllm-latency-proxy
         static_configs:
           - targets:
               - {{ include "vllm-latency-metrics.fullname" . }}-proxy:{{ .Values.proxy.service.port }}
         metrics_path: /metrics
+      {{- end }}
+      {{- range .Values.prometheus.extraScrapeTargets }}
+      - job_name: {{ .job_name }}
+        static_configs:
+          - targets:
+              {{- range .static_configs }}
+              {{- range .targets }}
+              - {{ . | quote }}
+              {{- end }}
+              {{- end }}
+        {{- if .metrics_path }}
+        metrics_path: {{ .metrics_path }}
+        {{- end }}
+        {{- if .scrape_interval }}
+        scrape_interval: {{ .scrape_interval }}
+        {{- end }}
+      {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,6 +72,12 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
       volumes:
         - name: config
           configMap:

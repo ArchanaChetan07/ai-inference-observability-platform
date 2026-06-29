@@ -1,4 +1,4 @@
-{{- if and .Values.proxy.enabled .Values.proxy.podDisruptionBudget.enabled }}
+{{- if and .Values.proxy.enabled .Values.podDisruptionBudget.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.proxy.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
       {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}

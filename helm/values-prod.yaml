@@ -1,0 +1,42 @@
+# Production overlay — GPU cluster with full stack
+
+vllm:
+  enabled: true
+  gpuCount: 1
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+    limits:
+      memory: 32Gi
+
+proxy:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/ArchanaChetan07/vllm-latency-proxy
+    tag: "1.2.0"
+    pullPolicy: IfNotPresent
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+prometheus:
+  enabled: true
+  retention: 30d
+  alertmanager:
+    enabled: true
+
+grafana:
+  enabled: true
+
+opentelemetry:
+  enabled: true
+
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true

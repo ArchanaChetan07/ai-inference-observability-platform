@@ -27,9 +27,14 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: vllm-latency-proxy
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: proxy
-          image: ghcr.io/your-username/vllm-latency-proxy:latest
+          image: ghcr.io/ArchanaChetan07/vllm-latency-proxy:1.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -65,6 +70,12 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 12
           resources:
             requests:
               cpu: 500m

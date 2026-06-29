@@ -32,6 +32,6 @@ Thumbs.db
 hf_token*
 secrets/
 
-# Docker volumes / local data
-prometheus-data/
-grafana-data/
+# Benchmark output (generated)
+benchmarks/results/
+

@@ -69,4 +69,4 @@ SCALING
 
 DOCUMENTATION
 -------------
-  https://github.com/your-username/vllm-latency-metrics#kubernetes
+  https://github.com/ArchanaChetan07/ai-inference-observability-platform#kubernetes

@@ -76,7 +76,9 @@ spec:
             requests:
               cpu: {{ .Values.vllm.resources.requests.cpu | quote }}
               memory: {{ .Values.vllm.resources.requests.memory }}
+              {{- if gt (int .Values.vllm.gpuCount) 0 }}
               nvidia.com/gpu: {{ .Values.vllm.gpuCount | quote }}
+              {{- end }}
             limits:
               {{- if .Values.vllm.resources.limits.cpu }}
               cpu: {{ .Values.vllm.resources.limits.cpu | quote }}
@@ -84,7 +86,9 @@ spec:
               {{- if .Values.vllm.resources.limits.memory }}
               memory: {{ .Values.vllm.resources.limits.memory }}
               {{- end }}
+              {{- if gt (int .Values.vllm.gpuCount) 0 }}
               nvidia.com/gpu: {{ .Values.vllm.gpuCount | quote }}
+              {{- end }}
           {{- if .Values.vllm.persistence.enabled }}
           volumeMounts:
             - name: hf-cache

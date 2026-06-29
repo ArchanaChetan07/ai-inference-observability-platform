@@ -44,7 +44,7 @@ vllm:
 proxy:
   enabled: true
   image:
-    repository: ghcr.io/your-username/vllm-latency-proxy
+    repository: ghcr.io/ArchanaChetan07/vllm-latency-proxy
     tag: "latest"
     pullPolicy: Always
   replicaCount: 2
