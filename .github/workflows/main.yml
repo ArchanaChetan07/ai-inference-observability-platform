@@ -18,9 +18,6 @@ env:
   PYTHON_VERSION: "3.11"
   HELM_VERSION: v3.14.4
   KUBECONFORM_VERSION: v0.6.7
-  # Official tag (v-prefix required since aquasecurity/trivy-action retagged post-2026-03)
-  # SHA: a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
-  TRIVY_ACTION: aquasecurity/trivy-action@v0.36.0
 
 jobs:
   lint:
@@ -143,6 +140,10 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    env:
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+      SARIF_FS: ${{ github.workspace }}/trivy-fs.sarif
+      SBOM_FS: ${{ github.workspace }}/sbom-filesystem.spdx.json
     steps:
       - uses: actions/checkout@v4
 
@@ -156,50 +157,54 @@ jobs:
           pip install bandit
           bandit -r proxy.py vllm_patch/ -ll -f json -o bandit-results.json
           bandit -r proxy.py vllm_patch/ -ll
+          test -s bandit-results.json
 
       - name: pip-audit dependency scan
         run: |
           pip install pip-audit
           pip-audit -r requirements.txt --progress-spinner off
 
-      - name: Trivy filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
         with:
-          scan-type: fs
-          scan-ref: .
-          format: sarif
-          output: trivy-fs.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "0"
+          cache: true
+          version: v0.71.0
+
+      - name: Trivy filesystem vulnerability scan (SARIF)
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --scanners vuln,secret \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 0 \
+            --format sarif \
+            --output "${SARIF_FS}"
+          test -s "${SARIF_FS}"
+          python -c "import json; json.load(open('${SARIF_FS}'))"
 
       - name: Trivy license scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: license
-          format: table
-          exit-code: "0"
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --scanners license \
+            --exit-code 0 \
+            --format table
 
       - name: Trivy filesystem SBOM (SPDX)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: spdx-json
-          output: sbom-filesystem.spdx.json
-          exit-code: "0"
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --format spdx-json \
+            --exit-code 0 \
+            --output "${SBOM_FS}"
+          test -s "${SBOM_FS}"
 
       - name: Upload filesystem SBOM
         uses: actions/upload-artifact@v4
         with:
           name: sbom-filesystem
-          path: sbom-filesystem.spdx.json
+          path: ${{ env.SBOM_FS }}
           retention-days: 30
 
       - name: Upload Bandit results
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bandit-results
@@ -207,8 +212,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Trivy filesystem SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-filesystem
@@ -291,6 +295,10 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    env:
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+      SARIF_IMAGE: ${{ github.workspace }}/trivy-image.sarif
+      SBOM_IMAGE: ${{ github.workspace }}/sbom-container.spdx.json
     steps:
       - uses: actions/checkout@v4
 
@@ -303,37 +311,41 @@ jobs:
       - name: Load Docker image
         run: docker load -i /tmp/image.tar
 
-      - name: Trivy container vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
         with:
-          scan-type: image
-          image-ref: ${{ needs.docker-build.outputs.image-tag }}
-          format: sarif
-          output: trivy-image.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          vuln-type: os,library
-          exit-code: "0"
+          cache: true
+          version: v0.71.0
+
+      - name: Trivy container vulnerability scan (SARIF)
+        run: |
+          trivy image "${{ needs.docker-build.outputs.image-tag }}" \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --exit-code 0 \
+            --format sarif \
+            --output "${SARIF_IMAGE}"
+          test -s "${SARIF_IMAGE}"
+          python -c "import json; json.load(open('${SARIF_IMAGE}'))"
 
       - name: Trivy container SBOM (SPDX)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          image-ref: ${{ needs.docker-build.outputs.image-tag }}
-          format: spdx-json
-          output: sbom-container.spdx.json
-          exit-code: "0"
+        run: |
+          trivy image "${{ needs.docker-build.outputs.image-tag }}" \
+            --format spdx-json \
+            --exit-code 0 \
+            --output "${SBOM_IMAGE}"
+          test -s "${SBOM_IMAGE}"
 
       - name: Upload container SBOM
         uses: actions/upload-artifact@v4
         with:
           name: sbom-container
-          path: sbom-container.spdx.json
+          path: ${{ env.SBOM_IMAGE }}
           retention-days: 90
 
       - name: Upload Trivy container SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-container
