@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import sys
@@ -13,7 +12,6 @@ from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from proxy import app
-
 from tests.helpers import make_non_streaming_response
 
 
@@ -28,9 +26,7 @@ async def test_malformed_json_body_passthrough_as_empty():
     mock_client.post = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/v1/chat/completions",
             content=b"not-json",
@@ -50,9 +46,7 @@ async def test_upstream_error_status_preserved():
     mock_client.post = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/v1/chat/completions",
             json={"model": "m", "messages": [], "stream": False},
@@ -84,9 +78,7 @@ async def test_streaming_no_content_tokens_still_completes():
     mock_client.stream = MagicMock(return_value=mock_context)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         async with client.stream(
             "POST",
             "/v1/chat/completions",
@@ -110,9 +102,7 @@ async def test_completions_endpoint_instrumented():
     mock_client.post = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/v1/completions",
             json={"model": "m", "prompt": "hi", "stream": False},
@@ -133,9 +123,7 @@ async def test_custom_request_id_propagated():
     mock_client.post = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/v1/chat/completions",
             json={"model": "m", "messages": [], "stream": False},
@@ -155,9 +143,7 @@ async def test_passthrough_models_endpoint():
     mock_client.request = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/v1/models")
     assert resp.status_code == 200
     assert resp.json()["object"] == "list"
@@ -177,9 +163,7 @@ async def test_openai_usage_token_fields_unchanged():
     mock_client.post = AsyncMock(return_value=mock_resp)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/v1/chat/completions",
             json={"model": "m", "messages": [], "stream": False},

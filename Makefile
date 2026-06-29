@@ -57,7 +57,7 @@ typecheck:  ## Run mypy type checker
 
 security:  ## Run security scans
 	bandit -r proxy.py vllm_patch/ -ll
-	safety check -r requirements.txt
+	pip-audit -r requirements.txt
 
 # ---------------------------------------------------------------------------
 # Docker

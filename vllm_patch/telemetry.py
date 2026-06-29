@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from typing import Any
 
 log = logging.getLogger("vllm-latency-proxy.telemetry")
 
@@ -40,7 +41,7 @@ class _NoopSpan:
     def end(self, *_args: Any, **_kwargs: Any) -> None:
         pass
 
-    def __enter__(self) -> "_NoopSpan":
+    def __enter__(self) -> _NoopSpan:
         return self
 
     def __exit__(self, *_args: Any) -> None:
@@ -52,7 +53,9 @@ class _NoopTracer:
         return _NoopSpan()
 
     @contextmanager
-    def start_as_current_span(self, *_args: Any, **_kwargs: Any) -> Generator[_NoopSpan, None, None]:
+    def start_as_current_span(
+        self, *_args: Any, **_kwargs: Any
+    ) -> Generator[_NoopSpan, None, None]:
         yield _NoopSpan()
 
 
@@ -170,8 +173,8 @@ def record_completion(
     span: Any,
     *,
     ttft_ms: float,
-    mean_tbt_ms: Optional[float],
-    p99_tbt_ms: Optional[float],
+    mean_tbt_ms: float | None,
+    p99_tbt_ms: float | None,
     total_tokens: int,
     e2e_ms: float,
 ) -> None:

@@ -9,10 +9,6 @@ Key change locations are marked with # [PATCH].
 
 from __future__ import annotations
 
-import asyncio
-import time
-from typing import AsyncIterator, Dict, List, Optional, Type
-
 # These imports exist in the real file; shown here for context
 # from vllm.outputs import RequestOutput, LatencyMetrics
 # from vllm.sequence import SequenceGroup

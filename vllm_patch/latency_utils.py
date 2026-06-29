@@ -10,7 +10,7 @@ from __future__ import annotations
 import heapq
 import random
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any
 
 # Fast substring checks before json.loads on the streaming hot path.
 _SSE_CONTENT_MARKERS = (
@@ -25,7 +25,7 @@ _SSE_CONTENT_MARKERS = (
 _TBT_RESERVOIR_SIZE = 256
 
 
-def percentile(values: List[float], p: float) -> Optional[float]:
+def percentile(values: list[float], p: float) -> float | None:
     """Return the p-th percentile (0–1) using O(n log k) selection."""
     if not values:
         return None
@@ -37,7 +37,7 @@ def percentile(values: List[float], p: float) -> Optional[float]:
     return heapq.nlargest(k, values)[-1]
 
 
-def compute_tbt_ms_list(token_timestamps: List[float]) -> List[float]:
+def compute_tbt_ms_list(token_timestamps: list[float]) -> list[float]:
     """Inter-token intervals in milliseconds from monotonic timestamps."""
     if len(token_timestamps) < 2:
         return []
@@ -76,13 +76,13 @@ class LatencySnapshot:
     """Immutable latency result for a single request."""
 
     ttft_ms: float
-    mean_tbt_ms: Optional[float]
-    p99_tbt_ms: Optional[float]
+    mean_tbt_ms: float | None
+    p99_tbt_ms: float | None
     total_tokens: int
     e2e_ms: float
     tbt_ms_list: tuple[float, ...] = field(default_factory=tuple)
 
-    def to_usage_fields(self) -> dict[str, Optional[float]]:
+    def to_usage_fields(self) -> dict[str, float | None]:
         return {
             "ttft_ms": round(self.ttft_ms, 3),
             "mean_tbt_ms": round(self.mean_tbt_ms, 3) if self.mean_tbt_ms is not None else None,
@@ -138,12 +138,12 @@ class StreamLatencyTracker:
 
     def __init__(self, request_start: float) -> None:
         self._request_start = request_start
-        self._first_token_time: Optional[float] = None
-        self._last_token_time: Optional[float] = None
+        self._first_token_time: float | None = None
+        self._last_token_time: float | None = None
         self._token_count = 0
         self._tbt_count = 0
         self._tbt_sum = 0.0
-        self._tbt_reservoir: List[float] = []
+        self._tbt_reservoir: list[float] = []
         self._tbt_seen = 0
 
     @property

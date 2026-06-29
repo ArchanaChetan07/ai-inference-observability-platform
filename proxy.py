@@ -7,7 +7,6 @@ response headers, usage fields, SSE comments, and Prometheus metrics.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -17,7 +16,6 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Deque, List, Optional
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -31,6 +29,7 @@ from prometheus_client import (
     generate_latest,
 )
 
+from vllm_patch import telemetry
 from vllm_patch.latency_utils import (
     LatencySnapshot,
     StreamLatencyTracker,
@@ -39,7 +38,6 @@ from vllm_patch.latency_utils import (
     sse_chunk_has_content,
     sse_line_may_have_content,
 )
-from vllm_patch import telemetry
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -97,8 +95,8 @@ class LatencyRecord:
     request_id: str
     model: str
     ttft_ms: float
-    mean_tbt_ms: Optional[float]
-    p99_tbt_ms: Optional[float]
+    mean_tbt_ms: float | None
+    p99_tbt_ms: float | None
     total_tokens: int
     e2e_seconds: float
     timestamp: float = field(default_factory=time.time)
@@ -108,7 +106,7 @@ class RollingStats:
     """Rolling window with sync append (hot path) and async summary (API)."""
 
     def __init__(self, maxlen: int = STATS_WINDOW) -> None:
-        self._records: Deque[LatencyRecord] = deque(maxlen=maxlen)
+        self._records: deque[LatencyRecord] = deque(maxlen=maxlen)
         self._lock = threading.Lock()
 
     def add_sync(self, record: LatencyRecord) -> None:
@@ -205,6 +203,7 @@ def _parse_sse_content_line(line: str) -> bool:
     except json.JSONDecodeError:
         return False
 
+
 # ---------------------------------------------------------------------------
 # FastAPI application
 # ---------------------------------------------------------------------------
@@ -294,9 +293,7 @@ async def proxy_passthrough(request: Request, path: str) -> Response:
     client: httpx.AsyncClient = app.state.http_client
     body = await request.body()
     headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length")
+        k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")
     }
     try:
         resp = await client.request(
@@ -352,9 +349,7 @@ async def _proxy_request(request: Request, path: str) -> Response:
     request_id = request.headers.get("x-request-id", f"req-{uuid.uuid4().hex}")
 
     headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length")
+        k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")
     }
     headers["x-request-id"] = request_id
 
@@ -365,12 +360,24 @@ async def _proxy_request(request: Request, path: str) -> Response:
         with telemetry.request_span(request_id, path, model, is_streaming) as span:
             if is_streaming:
                 return await _handle_streaming(
-                    client, path, headers, body_bytes,
-                    request_id, model, request_start, span,
+                    client,
+                    path,
+                    headers,
+                    body_bytes,
+                    request_id,
+                    model,
+                    request_start,
+                    span,
                 )
             return await _handle_non_streaming(
-                client, path, headers, body_bytes,
-                request_id, model, request_start, span,
+                client,
+                path,
+                headers,
+                body_bytes,
+                request_id,
+                model,
+                request_start,
+                span,
             )
     except Exception as exc:
         REQUEST_COUNTER.labels(endpoint=path, status="error").inc()
@@ -430,9 +437,7 @@ async def _handle_streaming(
                                 yield f"{comment}\n".encode()
                             _record_prometheus(snapshot, tbt_samples)
                             _record_to_stats_sync(snapshot, request_id, model)
-                            REQUEST_COUNTER.labels(
-                                endpoint=path, status=str(status_code)
-                            ).inc()
+                            REQUEST_COUNTER.labels(endpoint=path, status=str(status_code)).inc()
                             continue
 
                         yield (line + "\n").encode()

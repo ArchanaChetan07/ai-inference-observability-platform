@@ -13,15 +13,16 @@ if (-not $SkipTests) {
 }
 
 Write-Host "`n=== ruff ===" -ForegroundColor Cyan
-python -m ruff check proxy.py vllm_patch/ tests/ 2>$null
-if ($LASTEXITCODE -ne 0) { python -m pip install ruff -q; python -m ruff check proxy.py vllm_patch/ tests/ }
+python -m pip install ruff -q
+python -m ruff check .
+python -m ruff format --check .
 
 Write-Host "`n=== helm lint ===" -ForegroundColor Cyan
 helm lint ./helm
 helm lint ./helm -f helm/values-prod.yaml
 helm lint ./helm -f helm/values-docker-desktop.yaml
 
-Write-Host "`n=== kubectl dry-run ===" -ForegroundColor Cyan
-kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -
+Write-Host "`n=== kubectl dry-run (offline) ===" -ForegroundColor Cyan
+kubectl kustomize k8s/ | kubectl apply --dry-run=client --validate=false -f -
 
 Write-Host "`n=== All validations passed ===" -ForegroundColor Green

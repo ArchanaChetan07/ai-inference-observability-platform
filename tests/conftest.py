@@ -1,7 +1,6 @@
 """
 pytest configuration — vLLM Latency Metrics Proxy
 """
-import pytest
 
 
 def pytest_configure(config):

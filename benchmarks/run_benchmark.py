@@ -30,14 +30,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import statistics
-import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 import httpx
 
@@ -45,16 +42,17 @@ import httpx
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SingleResult:
     request_id: int
     concurrency: int
-    ttft_ms: Optional[float]
-    mean_tbt_ms: Optional[float]
+    ttft_ms: float | None
+    mean_tbt_ms: float | None
     e2e_ms: float
-    tokens_generated: Optional[int]
+    tokens_generated: int | None
     status_code: int
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def success(self) -> bool:
@@ -67,12 +65,12 @@ class LevelSummary:
     n_requests: int
     n_success: int
     throughput_rps: float
-    ttft_p50: Optional[float]
-    ttft_p95: Optional[float]
-    ttft_p99: Optional[float]
-    ttft_mean: Optional[float]
-    mean_tbt_p50: Optional[float]
-    mean_tbt_p99: Optional[float]
+    ttft_p50: float | None
+    ttft_p95: float | None
+    ttft_p99: float | None
+    ttft_mean: float | None
+    mean_tbt_p50: float | None
+    mean_tbt_p99: float | None
     e2e_p99: float
     error_rate: float
 
@@ -80,6 +78,7 @@ class LevelSummary:
 # ---------------------------------------------------------------------------
 # Benchmark runner
 # ---------------------------------------------------------------------------
+
 
 async def single_streaming_request(
     client: httpx.AsyncClient,
@@ -90,8 +89,8 @@ async def single_streaming_request(
     prompt: str,
 ) -> SingleResult:
     t0 = time.monotonic()
-    first_token_time: Optional[float] = None
-    token_times: List[float] = []
+    first_token_time: float | None = None
+    token_times: list[float] = []
     status_code = 0
     error = None
     tokens_generated = 0
@@ -134,10 +133,7 @@ async def single_streaming_request(
         ttft_ms = (first_token_time - t0) * 1000.0
 
     if len(token_times) >= 2:
-        tbts = [
-            (token_times[i] - token_times[i - 1]) * 1000.0
-            for i in range(1, len(token_times))
-        ]
+        tbts = [(token_times[i] - token_times[i - 1]) * 1000.0 for i in range(1, len(token_times))]
         mean_tbt_ms = statistics.mean(tbts)
 
     return SingleResult(
@@ -158,7 +154,7 @@ async def run_level(
     concurrency: int,
     n_requests: int,
     max_tokens: int,
-) -> List[SingleResult]:
+) -> list[SingleResult]:
     """Run n_requests with a given concurrency and return all results."""
     prompts = [
         "Explain the concept of attention in transformer models.",
@@ -169,9 +165,10 @@ async def run_level(
     ]
 
     semaphore = asyncio.Semaphore(concurrency)
-    results: List[SingleResult] = []
+    results: list[SingleResult] = []
 
     async with httpx.AsyncClient(base_url=base_url) as client:
+
         async def bounded_request(rid: int) -> SingleResult:
             async with semaphore:
                 prompt = prompts[rid % len(prompts)]
@@ -187,7 +184,7 @@ async def run_level(
     return results, elapsed
 
 
-def summarize(results: List[SingleResult], elapsed: float, concurrency: int) -> LevelSummary:
+def summarize(results: list[SingleResult], elapsed: float, concurrency: int) -> LevelSummary:
     successes = [r for r in results if r.success]
     ttfts = [r.ttft_ms for r in successes if r.ttft_ms is not None]
     mean_tbts = [r.mean_tbt_ms for r in successes if r.mean_tbt_ms is not None]
@@ -215,19 +212,19 @@ def summarize(results: List[SingleResult], elapsed: float, concurrency: int) -> 
     )
 
 
-def render_markdown(summaries: List[LevelSummary], base_url: str, model: str) -> str:
+def render_markdown(summaries: list[LevelSummary], base_url: str, model: str) -> str:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines = [
-        f"# vLLM Latency Benchmark Results",
-        f"",
+        "# vLLM Latency Benchmark Results",
+        "",
         f"**Timestamp:** {ts}  ",
         f"**Endpoint:** `{base_url}`  ",
         f"**Model:** `{model}`  ",
-        f"",
-        f"## TTFT (Time-To-First-Token) in milliseconds",
-        f"",
-        f"| Concurrency | Requests | Success | RPS | p50 | p95 | p99 | Mean |",
-        f"|-------------|----------|---------|-----|-----|-----|-----|------|",
+        "",
+        "## TTFT (Time-To-First-Token) in milliseconds",
+        "",
+        "| Concurrency | Requests | Success | RPS | p50 | p95 | p99 | Mean |",
+        "|-------------|----------|---------|-----|-----|-----|-----|------|",
     ]
     for s in summaries:
         lines.append(
@@ -240,11 +237,11 @@ def render_markdown(summaries: List[LevelSummary], base_url: str, model: str) ->
         )
 
     lines += [
-        f"",
-        f"## TBT (Mean Time-Between-Tokens) in milliseconds",
-        f"",
-        f"| Concurrency | p50 | p99 | Error Rate |",
-        f"|-------------|-----|-----|------------|",
+        "",
+        "## TBT (Mean Time-Between-Tokens) in milliseconds",
+        "",
+        "| Concurrency | p50 | p99 | Error Rate |",
+        "|-------------|-----|-----|------------|",
     ]
     for s in summaries:
         lines.append(
@@ -255,12 +252,12 @@ def render_markdown(summaries: List[LevelSummary], base_url: str, model: str) ->
         )
 
     lines += [
-        f"",
-        f"## Notes",
-        f"- TTFT measured client-side (proxy SSE comment or header)",
-        f"- TBT measured as mean inter-token interval per request",
-        f"- All values in milliseconds",
-        f"- Error rate includes timeouts and HTTP errors",
+        "",
+        "## Notes",
+        "- TTFT measured client-side (proxy SSE comment or header)",
+        "- TBT measured as mean inter-token interval per request",
+        "- All values in milliseconds",
+        "- Error rate includes timeouts and HTTP errors",
     ]
     return "\n".join(lines)
 
@@ -281,8 +278,12 @@ def compare_benchmarks(baseline_path: str, proxy_path: str) -> None:
     b_summaries = {s["concurrency"]: s for s in baseline["summaries"]}
     p_summaries = {s["concurrency"]: s for s in proxy["summaries"]}
 
-    print("| Concurrency | Baseline RPS | Proxy RPS | RPS delta% | Baseline TTFT p99 | Proxy TTFT p99 | TTFT delta ms |")
-    print("|-------------|--------------|-----------|--------|-------------------|----------------|-----------|")
+    print(
+        "| Concurrency | Baseline RPS | Proxy RPS | RPS delta% | Baseline TTFT p99 | Proxy TTFT p99 | TTFT delta ms |"
+    )
+    print(
+        "|-------------|--------------|-----------|--------|-------------------|----------------|-----------|"
+    )
 
     for conc in sorted(b_summaries.keys()):
         b = b_summaries.get(conc, {})
@@ -293,10 +294,7 @@ def compare_benchmarks(baseline_path: str, proxy_path: str) -> None:
         b_ttft = b.get("ttft_p99") or 0
         p_ttft = p.get("ttft_p99") or 0
         ttft_delta = round(p_ttft - b_ttft, 2)
-        print(
-            f"| {conc} | {b_rps} | {p_rps} | {rps_delta}% "
-            f"| {b_ttft} | {p_ttft} | {ttft_delta} |"
-        )
+        print(f"| {conc} | {b_rps} | {p_rps} | {rps_delta}% | {b_ttft} | {p_ttft} | {ttft_delta} |")
 
     print("\nNote: TTFT delta includes proxy network hop; RPS delta reflects overhead.")
 
@@ -304,6 +302,7 @@ def compare_benchmarks(baseline_path: str, proxy_path: str) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main():
     parser = argparse.ArgumentParser(description="vLLM Latency Benchmark")
@@ -329,12 +328,12 @@ async def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    print(f"\n{'='*60}")
-    print(f"vLLM Latency Benchmark")
+    print(f"\n{'=' * 60}")
+    print("vLLM Latency Benchmark")
     print(f"Endpoint: {args.base_url}")
     print(f"Model:    {args.model}")
     print(f"Levels:   concurrency={args.concurrency}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     all_summaries = []
     all_raw_results = []
@@ -352,19 +351,25 @@ async def main():
         all_summaries.append(summary)
         all_raw_results.extend([asdict(r) for r in results])
 
-        print(f"  OK RPS={summary.throughput_rps}  "
-              f"TTFT p99={summary.ttft_p99}ms  "
-              f"TBT p99={summary.mean_tbt_p99}ms  "
-              f"errors={summary.error_rate}%")
+        print(
+            f"  OK RPS={summary.throughput_rps}  "
+            f"TTFT p99={summary.ttft_p99}ms  "
+            f"TBT p99={summary.mean_tbt_p99}ms  "
+            f"errors={summary.error_rate}%"
+        )
 
     # Save JSON
     json_path = output_dir / f"benchmark_{ts}.json"
     with open(json_path, "w") as f:
-        json.dump({
-            "meta": {"timestamp": ts, "base_url": args.base_url, "model": args.model},
-            "summaries": [asdict(s) for s in all_summaries],
-            "raw": all_raw_results,
-        }, f, indent=2)
+        json.dump(
+            {
+                "meta": {"timestamp": ts, "base_url": args.base_url, "model": args.model},
+                "summaries": [asdict(s) for s in all_summaries],
+                "raw": all_raw_results,
+            },
+            f,
+            indent=2,
+        )
 
     # Save Markdown
     md_path = output_dir / f"benchmark_{ts}.md"
@@ -372,8 +377,8 @@ async def main():
     with open(md_path, "w") as f:
         f.write(md)
 
-    print(f"\n{'='*60}")
-    print(f"Results saved:")
+    print(f"\n{'=' * 60}")
+    print("Results saved:")
     print(f"  JSON: {json_path}")
     print(f"  MD:   {md_path}")
     print(f"\n{md}")

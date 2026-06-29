@@ -21,8 +21,10 @@ import asyncio
 import json
 import os
 import statistics
+
+# Import the proxy app
+import sys
 import time
-from typing import AsyncIterator, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -31,16 +33,16 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-# Import the proxy app
-import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from proxy import app, STATS, LatencyRecord, RollingStats
-from vllm_patch.outputs import LatencyMetrics
+from proxy import LatencyRecord, RollingStats, app
+from tests.helpers import make_non_streaming_response, make_sse_stream
 
+from vllm_patch.outputs import LatencyMetrics
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sync_client():
@@ -52,9 +54,7 @@ def sync_client():
 @pytest_asyncio.fixture
 async def async_client():
     """Async test client for async tests."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
@@ -78,12 +78,10 @@ def sample_streaming_body():
     }
 
 
-from tests.helpers import make_non_streaming_response, make_sse_stream
-
-
 # ===========================================================================
 # UNIT TESTS — LatencyMetrics dataclass
 # ===========================================================================
+
 
 class TestLatencyMetrics:
     """Unit tests for the LatencyMetrics dataclass in outputs.py"""
@@ -208,8 +206,8 @@ class TestLatencyMetrics:
 # UNIT TESTS — RollingStats
 # ===========================================================================
 
-class TestRollingStats:
 
+class TestRollingStats:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_empty_stats(self):
@@ -222,9 +220,13 @@ class TestRollingStats:
     async def test_single_record(self):
         stats = RollingStats(maxlen=100)
         record = LatencyRecord(
-            request_id="r1", model="opt", ttft_ms=150.0,
-            mean_tbt_ms=10.33, p99_tbt_ms=12.0,
-            total_tokens=4, e2e_seconds=0.5
+            request_id="r1",
+            model="opt",
+            ttft_ms=150.0,
+            mean_tbt_ms=10.33,
+            p99_tbt_ms=12.0,
+            total_tokens=4,
+            e2e_seconds=0.5,
         )
         await stats.add(record)
         summary = await stats.summary()
@@ -236,12 +238,17 @@ class TestRollingStats:
     async def test_rolling_window_eviction(self):
         stats = RollingStats(maxlen=3)
         for i in range(5):
-            await stats.add(LatencyRecord(
-                request_id=f"r{i}", model="opt",
-                ttft_ms=float(i * 100),
-                mean_tbt_ms=None, p99_tbt_ms=None,
-                total_tokens=1, e2e_seconds=0.1
-            ))
+            await stats.add(
+                LatencyRecord(
+                    request_id=f"r{i}",
+                    model="opt",
+                    ttft_ms=float(i * 100),
+                    mean_tbt_ms=None,
+                    p99_tbt_ms=None,
+                    total_tokens=1,
+                    e2e_seconds=0.1,
+                )
+            )
         summary = await stats.summary()
         # Only last 3 records kept (200, 300, 400)
         assert summary["count"] == 3
@@ -252,8 +259,8 @@ class TestRollingStats:
 # INTEGRATION TESTS — FastAPI endpoints
 # ===========================================================================
 
-class TestHealthEndpoint:
 
+class TestHealthEndpoint:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_health_returns_proxy_ok(self, async_client):
@@ -285,16 +292,14 @@ class TestHealthEndpoint:
 
 
 class TestNonStreamingProxy:
-
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_non_streaming_injects_latency_into_usage(
-        self, async_client, sample_chat_body
-    ):
+    async def test_non_streaming_injects_latency_into_usage(self, async_client, sample_chat_body):
         mock_response_data = make_non_streaming_response()
 
         with patch.object(
-            app.state, "http_client",
+            app.state,
+            "http_client",
             create=True,
         ) as _:
             # Patch at the httpx client level
@@ -323,9 +328,7 @@ class TestNonStreamingProxy:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_non_streaming_injects_response_headers(
-        self, async_client, sample_chat_body
-    ):
+    async def test_non_streaming_injects_response_headers(self, async_client, sample_chat_body):
         mock_response_data = make_non_streaming_response()
 
         mock_client = AsyncMock()
@@ -350,9 +353,7 @@ class TestNonStreamingProxy:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_existing_clients_see_no_breaking_change(
-        self, async_client, sample_chat_body
-    ):
+    async def test_existing_clients_see_no_breaking_change(self, async_client, sample_chat_body):
         """Backward-compat: existing fields still present, new ones additive."""
         mock_response_data = make_non_streaming_response()
 
@@ -378,12 +379,9 @@ class TestNonStreamingProxy:
 
 
 class TestStreamingProxy:
-
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_streaming_injects_sse_comments(
-        self, async_client, sample_streaming_body
-    ):
+    async def test_streaming_injects_sse_comments(self, async_client, sample_streaming_body):
         """SSE comments carrying latency should appear in the stream."""
         tokens = ["Hello", " world", "!", " How", " are", " you"]
         sse_body = make_sse_stream(tokens)
@@ -451,7 +449,6 @@ class TestStreamingProxy:
 
 
 class TestOverheadAndCompatibility:
-
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_zero_overhead_non_streaming(self, async_client, sample_chat_body):
@@ -486,22 +483,24 @@ class TestOverheadAndCompatibility:
 
 VLLM_URL = os.getenv("VLLM_E2E_URL", "")
 
+
 @pytest.mark.e2e
 @pytest.mark.skipif(not VLLM_URL, reason="Set VLLM_E2E_URL to run E2E tests")
 class TestE2EWithRealVLLM:
-
     def test_e2e_non_streaming(self):
         """Real TTFT measurement against running vLLM."""
         with httpx.Client(base_url=VLLM_URL, timeout=120.0) as client:
-            resp = client.post("/v1/chat/completions", json={
-                "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
-                "messages": [{"role": "user", "content": "What is 2+2?"}],
-                "max_tokens": 20,
-                "stream": False,
-            })
+            resp = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
+                    "messages": [{"role": "user", "content": "What is 2+2?"}],
+                    "max_tokens": 20,
+                    "stream": False,
+                },
+            )
 
         assert resp.status_code == 200
-        data = resp.json()
         assert "x-vllm-ttft-ms" in resp.headers
         ttft = float(resp.headers["x-vllm-ttft-ms"])
         assert ttft > 0
@@ -511,12 +510,16 @@ class TestE2EWithRealVLLM:
     def test_e2e_streaming_has_sse_latency_comments(self):
         """Real streaming TTFT measurement."""
         with httpx.Client(base_url=VLLM_URL, timeout=120.0) as client:
-            with client.stream("POST", "/v1/chat/completions", json={
-                "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
-                "messages": [{"role": "user", "content": "Count to 5."}],
-                "max_tokens": 50,
-                "stream": True,
-            }) as resp:
+            with client.stream(
+                "POST",
+                "/v1/chat/completions",
+                json={
+                    "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
+                    "messages": [{"role": "user", "content": "Count to 5."}],
+                    "max_tokens": 50,
+                    "stream": True,
+                },
+            ) as resp:
                 body = resp.read().decode()
 
         assert "x-vllm-ttft-ms=" in body
@@ -530,20 +533,31 @@ class TestE2EWithRealVLLM:
         """Server TTFT should be within 5ms of client-measured TTFT."""
         with httpx.Client(base_url=VLLM_URL, timeout=120.0) as client:
             client_t0 = time.monotonic()
-            with client.stream("POST", "/v1/chat/completions", json={
-                "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
-                "messages": [{"role": "user", "content": "Say hello."}],
-                "max_tokens": 5,
-                "stream": True,
-            }) as resp:
+            with client.stream(
+                "POST",
+                "/v1/chat/completions",
+                json={
+                    "model": os.getenv("VLLM_MODEL", "facebook/opt-1.3b"),
+                    "messages": [{"role": "user", "content": "Say hello."}],
+                    "max_tokens": 5,
+                    "stream": True,
+                },
+            ) as resp:
                 client_first_token_time = None
                 body_lines = []
                 for line in resp.iter_lines():
                     now = time.monotonic()
-                    if client_first_token_time is None and line.startswith("data: ") and line != "data: [DONE]":
+                    if (
+                        client_first_token_time is None
+                        and line.startswith("data: ")
+                        and line != "data: [DONE]"
+                    ):
                         try:
                             payload = json.loads(line[6:])
-                            if any(c.get("delta", {}).get("content") for c in payload.get("choices", [])):
+                            if any(
+                                c.get("delta", {}).get("content")
+                                for c in payload.get("choices", [])
+                            ):
                                 client_first_token_time = now
                         except Exception:
                             pass
@@ -565,7 +579,9 @@ class TestE2EWithRealVLLM:
             pytest.fail("Server TTFT not found in SSE stream")
 
         delta = abs(server_ttft_ms - client_ttft_ms)
-        print(f"\nClient TTFT: {client_ttft_ms:.1f}ms | Server TTFT: {server_ttft_ms:.1f}ms | Delta: {delta:.1f}ms")
+        print(
+            f"\nClient TTFT: {client_ttft_ms:.1f}ms | Server TTFT: {server_ttft_ms:.1f}ms | Delta: {delta:.1f}ms"
+        )
         assert delta < 50.0, f"TTFT delta {delta:.1f}ms exceeds 50ms (network latency included)"
 
 
@@ -573,9 +589,9 @@ class TestE2EWithRealVLLM:
 # BENCHMARK TESTS
 # ===========================================================================
 
+
 @pytest.mark.benchmark
 class TestBenchmark:
-
     @pytest.mark.asyncio
     async def test_latency_metrics_throughput(self):
         """LatencyMetrics should handle 10k req/s with negligible CPU overhead."""
@@ -599,15 +615,17 @@ class TestBenchmark:
 
         async def write_records(n: int):
             for i in range(n):
-                await stats.add(LatencyRecord(
-                    request_id=f"r{i}",
-                    model="opt",
-                    ttft_ms=float(i % 100),
-                    mean_tbt_ms=10.0,
-                    p99_tbt_ms=15.0,
-                    total_tokens=6,
-                    e2e_seconds=0.5,
-                ))
+                await stats.add(
+                    LatencyRecord(
+                        request_id=f"r{i}",
+                        model="opt",
+                        ttft_ms=float(i % 100),
+                        mean_tbt_ms=10.0,
+                        p99_tbt_ms=15.0,
+                        total_tokens=6,
+                        e2e_seconds=0.5,
+                    )
+                )
 
         await asyncio.gather(*[write_records(N // 10) for _ in range(10)])
         summary = await stats.summary()

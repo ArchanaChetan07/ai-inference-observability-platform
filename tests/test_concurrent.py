@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from proxy import ACTIVE_REQUESTS, STATS, app
+from proxy import ACTIVE_REQUESTS, app
 from tests.helpers import make_non_streaming_response
 
 
@@ -34,9 +34,7 @@ async def test_concurrent_non_streaming_requests():
     mock_client.post = mock_post
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         tasks = [
             client.post(
                 "/v1/chat/completions",
@@ -77,9 +75,8 @@ async def test_concurrent_streaming_requests():
     mock_client.stream = MagicMock(side_effect=make_stream)
     app.state.http_client = mock_client
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+
         async def one_stream():
             async with client.stream(
                 "POST",
@@ -114,16 +111,16 @@ async def test_active_requests_gauge_returns_to_zero():
 
     before = ACTIVE_REQUESTS._value.get()
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        await asyncio.gather(*[
-            client.post(
-                "/v1/chat/completions",
-                json={"model": "m", "messages": [], "stream": False},
-            )
-            for _ in range(5)
-        ])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await asyncio.gather(
+            *[
+                client.post(
+                    "/v1/chat/completions",
+                    json={"model": "m", "messages": [], "stream": False},
+                )
+                for _ in range(5)
+            ]
+        )
 
     await asyncio.sleep(0.1)
     after = ACTIVE_REQUESTS._value.get()

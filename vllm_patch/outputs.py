@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Union
+from typing import Any
 
 # Graceful import — LatencyMetrics is standalone and testable without vLLM installed.
 try:
     from vllm.lora.request import LoRARequest
-    from vllm.sequence import (PromptLogprobs, RequestMetrics, SampleLogprobs,
-                                SequenceGroup, SequenceStatus)
+    from vllm.sequence import (
+        PromptLogprobs,
+        RequestMetrics,
+        SampleLogprobs,
+        SequenceGroup,
+        SequenceStatus,
+    )
+
     _VLLM_AVAILABLE = True
 except ImportError:
     _VLLM_AVAILABLE = False
@@ -29,13 +35,14 @@ except ImportError:
 @dataclass
 class CompletionOutput:
     """The output data of one completion output of a request."""
+
     index: int
     text: str
-    token_ids: List[int]
-    cumulative_logprob: Optional[float]
-    logprobs: Optional[Any]
-    finish_reason: Optional[str] = None
-    stop_reason: Union[int, str, None] = None
+    token_ids: list[int]
+    cumulative_logprob: float | None
+    logprobs: Any | None
+    finish_reason: str | None = None
+    stop_reason: int | str | None = None
 
     def finished(self) -> bool:
         return self.finish_reason is not None
@@ -67,14 +74,14 @@ class LatencyMetrics:
     """
 
     request_start_time: float = field(default_factory=time.monotonic)
-    first_token_time: Optional[float] = None
-    token_timestamps: List[float] = field(default_factory=list)
+    first_token_time: float | None = None
+    token_timestamps: list[float] = field(default_factory=list)
 
     # Derived — computed lazily via finalize()
-    ttft_ms: Optional[float] = None
-    tbt_ms_list: List[float] = field(default_factory=list)
-    mean_tbt_ms: Optional[float] = None
-    p99_tbt_ms: Optional[float] = None
+    ttft_ms: float | None = None
+    tbt_ms_list: list[float] = field(default_factory=list)
+    mean_tbt_ms: float | None = None
+    p99_tbt_ms: float | None = None
 
     def record_token(self) -> None:
         """Record a monotonic timestamp for the latest generated token."""
@@ -114,26 +121,30 @@ class RequestOutput:
     The output data of a completion request to the LLM.
     [PATCH] Added `latency` field carrying LatencyMetrics for this request.
     """
+
     request_id: str
-    prompt: Optional[str]
-    prompt_token_ids: List[int]
-    prompt_logprobs: Optional[Any]
-    outputs: List[CompletionOutput]
+    prompt: str | None
+    prompt_token_ids: list[int]
+    prompt_logprobs: Any | None
+    outputs: list[CompletionOutput]
     finished: bool
-    metrics: Optional[Any] = None
-    lora_request: Optional[Any] = None
+    metrics: Any | None = None
+    lora_request: Any | None = None
 
     # [PATCH] latency measurements for this request
     latency: LatencyMetrics = field(default_factory=LatencyMetrics)
 
     @classmethod
-    def from_seq_group(cls, seq_group: Any) -> "RequestOutput":
+    def from_seq_group(cls, seq_group: Any) -> RequestOutput:
         if not _VLLM_AVAILABLE:
             raise RuntimeError("vLLM not installed — from_seq_group requires real vLLM")
 
         seqs = seq_group.get_seqs()
-        top_n_seqs = sorted(seqs, key=lambda s: s.get_cumulative_logprob(), reverse=True) \
-            if len(seqs) > 1 else seqs
+        top_n_seqs = (
+            sorted(seqs, key=lambda s: s.get_cumulative_logprob(), reverse=True)
+            if len(seqs) > 1
+            else seqs
+        )
 
         outputs = [
             CompletionOutput(

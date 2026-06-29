@@ -10,7 +10,6 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -37,7 +36,7 @@ class BenchResult:
     p99_us: float
 
     @classmethod
-    def from_samples(cls, name: str, samples_us: List[float]) -> "BenchResult":
+    def from_samples(cls, name: str, samples_us: list[float]) -> BenchResult:
         s = sorted(samples_us)
         n = len(s)
         total = sum(s) / 1_000_000
@@ -69,7 +68,7 @@ def bench_sse_role_skip(n: int = 50_000) -> tuple[BenchResult, BenchResult]:
 
 
 def bench_finalize(token_count: int, n: int = 5_000) -> BenchResult:
-    samples: List[float] = []
+    samples: list[float] = []
     for _ in range(n):
         tracker = StreamLatencyTracker(0.0)
         for i in range(1, token_count + 1):
@@ -130,7 +129,7 @@ async def bench_stats_sync(n: int = 10_000) -> BenchResult:
     with STATS._lock:
         STATS._records.clear()
 
-    samples: List[float] = []
+    samples: list[float] = []
     t0 = time.perf_counter()
     for i in range(n):
         s = time.perf_counter_ns()
@@ -167,16 +166,20 @@ def main() -> None:
     print("Performance Review Micro-Benchmarks (v1.2)")
     print("=" * 60)
 
-    results: List[BenchResult] = []
-    extras: List[dict] = []
+    results: list[BenchResult] = []
+    extras: list[dict] = []
 
     r1, r2 = bench_sse_role_skip()
     results.extend([r1, r2])
-    print(f"\n[SSE role-only] json p99={r1.p99_us:.0f}us  fast p99={r2.p99_us:.0f}us  speedup={r1.p99_us/r2.p99_us:.1f}x")
+    print(
+        f"\n[SSE role-only] json p99={r1.p99_us:.0f}us  fast p99={r2.p99_us:.0f}us  speedup={r1.p99_us / r2.p99_us:.1f}x"
+    )
 
     r3, r4 = bench_stream_body_detect()
     results.extend([r3, r4])
-    print(f"[Body stream detect] json p99={r3.p99_us:.0f}us  fast p99={r4.p99_us:.0f}us  speedup={r3.p99_us/r4.p99_us:.1f}x")
+    print(
+        f"[Body stream detect] json p99={r3.p99_us:.0f}us  fast p99={r4.p99_us:.0f}us  speedup={r3.p99_us / r4.p99_us:.1f}x"
+    )
 
     for tc in (32, 128, 512, 2048):
         r = bench_finalize(tc)
@@ -185,7 +188,9 @@ def main() -> None:
 
     stall = bench_client_visible_stall(2048)
     extras.append(stall)
-    print(f"\n[2048 tok finalize] p99={stall['new_finalize_only_us_p99']:.0f}us (yield [DONE] first)")
+    print(
+        f"\n[2048 tok finalize] p99={stall['new_finalize_only_us_p99']:.0f}us (yield [DONE] first)"
+    )
 
     stats = asyncio.run(bench_stats_sync())
     results.append(stats)
