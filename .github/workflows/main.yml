@@ -43,7 +43,7 @@ jobs:
       - name: mypy type check
         run: |
           pip install -r requirements.txt
-          mypy proxy.py vllm_patch/outputs.py vllm_patch/latency_utils.py vllm_patch/telemetry.py --ignore-missing-imports
+          mypy
 
   test:
     name: Test Suite (Python ${{ matrix.python-version }})
@@ -120,10 +120,16 @@ jobs:
           kubeconform -summary -ignore-missing-schemas /tmp/k8s-rendered.yaml
           kubeconform -summary -ignore-missing-schemas /tmp/helm-rendered.yaml
 
-      - name: Client-side dry-run (offline schema validation disabled)
+      - name: Cluster dry-run (only when API server is available)
         run: |
-          kubectl apply --dry-run=client --validate=false -f /tmp/k8s-rendered.yaml
-          kubectl apply --dry-run=client --validate=false -f /tmp/helm-rendered.yaml
+          if kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then
+            echo "Kubernetes cluster detected — running server-side dry-run"
+            kubectl apply --dry-run=server -f /tmp/k8s-rendered.yaml
+            kubectl apply --dry-run=server -f /tmp/helm-rendered.yaml
+          else
+            echo "No Kubernetes cluster available — skipping kubectl apply"
+            echo "Offline validation (helm lint, template, kustomize, kubeconform) completed successfully"
+          fi
 
   security:
     name: Security Scan

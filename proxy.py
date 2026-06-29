@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -90,6 +91,16 @@ E2E_LATENCY = Histogram(
 # ---------------------------------------------------------------------------
 
 
+def _percentile_round(values: list[float], p: float) -> float | None:
+    """Return a rounded percentile, or None when the input series is empty."""
+    if not values:
+        return None
+    value = percentile(values, p)
+    if value is None:
+        return None
+    return round(value, 2)
+
+
 @dataclass(slots=True)
 class LatencyRecord:
     request_id: str
@@ -139,9 +150,9 @@ class RollingStats:
                 "max": round(max(ttfts), 2),
             },
             "mean_tbt_ms": {
-                "p50": round(percentile(mean_tbts, 0.50), 2) if mean_tbts else None,
-                "p95": round(percentile(mean_tbts, 0.95), 2) if mean_tbts else None,
-                "p99": round(percentile(mean_tbts, 0.99), 2) if mean_tbts else None,
+                "p50": _percentile_round(mean_tbts, 0.50),
+                "p95": _percentile_round(mean_tbts, 0.95),
+                "p99": _percentile_round(mean_tbts, 0.99),
                 "mean": round(statistics.mean(mean_tbts), 2) if mean_tbts else None,
             },
         }
@@ -530,7 +541,7 @@ if __name__ == "__main__":
 
     import uvicorn
 
-    loop = "uvloop" if sys.platform != "win32" else "asyncio"
+    loop: Literal["uvloop", "asyncio"] = "uvloop" if sys.platform != "win32" else "asyncio"
     uvicorn.run(
         "proxy:app",
         host=PROXY_HOST,

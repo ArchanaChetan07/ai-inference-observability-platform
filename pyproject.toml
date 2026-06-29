@@ -24,6 +24,8 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
+files = ["proxy.py", "vllm_patch"]
+exclude = ["tests/", "benchmarks/"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
