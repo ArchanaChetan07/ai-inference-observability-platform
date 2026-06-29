@@ -58,7 +58,7 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 - **Three metric layers** — TTFT · mean/P99 TBT · end-to-end latency on every request
 - **Full observability** — Prometheus `/metrics` · Grafana dashboards · Alertmanager · OTLP traces (Jaeger / Tempo)
 - **Production-ready** — Docker Compose · Kustomize · Helm · HPA · PDB · NetworkPolicy · GPU node scheduling
-- **Security hardened** — multi-stage Docker · non-root containers · CI vulnerability scanning
+- **Security hardened** — multi-stage Docker · pinned apt/pip deps · non-root containers · CI vulnerability scanning
 - **Benchmarked** — reproducible E2E and micro-benchmark suite with published results
 - **Optional upstream patch** — annotated vLLM engine integration for GPU-authoritative measurement ([`vllm_patch/`](vllm_patch/))
 
@@ -73,7 +73,7 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 | **Containers** | Docker · multi-stage builds · Docker Compose |
 | **Orchestration** | Kubernetes · Helm · Kustomize · HPA · PDB · NetworkPolicy |
 | **Observability** | Prometheus · Grafana · Alertmanager · OpenTelemetry · Jaeger |
-| **CI/CD** | GitHub Actions · GHCR · Ruff · mypy · pytest · Trivy · kubeconform |
+| **CI/CD** | GitHub Actions · GHCR · Ruff · mypy · Hadolint · pytest · Trivy · Cosign · kubeconform |
 
 ---
 
@@ -313,11 +313,18 @@ Every push to `main` triggers [GitHub Actions](.github/workflows/main.yml):
 
 | Stage | Tools |
 |-------|-------|
-| Lint | Ruff · mypy |
+| Lint | Ruff · mypy · Hadolint |
 | Test | pytest matrix (Python 3.10–3.12) · coverage |
-| Security | Bandit · pip-audit · Trivy |
-| Build | Docker multi-stage · GHCR push · SBOM |
 | Validate | Helm lint · kubeconform · offline manifest dry-run |
+| Security | Bandit · pip-audit · Trivy (filesystem SARIF + SBOM) |
+| Build | Docker multi-stage · GHCR push · Cosign keyless signing |
+| Scan | Trivy container SARIF · container SBOM |
+
+Docker builds use pinned apt packages and [`requirements.lock`](requirements.lock) for reproducible installs. Regenerate the lock file when dependencies change:
+
+```bash
+pip-compile requirements.txt -o requirements.lock --strip-extras
+```
 
 > Route all client traffic through the **proxy** Service — not vLLM directly.
 
@@ -361,6 +368,7 @@ powershell -File scripts/validate.ps1                      # full validation sui
 ```
 ai-inference-observability-platform/
 ├── proxy.py                      # FastAPI latency proxy
+├── requirements.lock             # Pinned deps for reproducible Docker builds
 ├── vllm_patch/                   # Latency utils + OpenTelemetry + upstream patch
 ├── docker/                       # Dockerfile, Compose, Alertmanager, OTel overlay
 ├── k8s/                          # Kubernetes manifests (Kustomize)
