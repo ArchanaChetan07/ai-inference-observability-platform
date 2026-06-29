@@ -22,16 +22,19 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build tools
+# Pin apt packages for reproducible builds (regenerate when base image updates).
+ARG GCC_VERSION=4:14.2.0-1
+ARG GPP_VERSION=4:14.2.0-1
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
+    gcc=${GCC_VERSION} \
+    g++=${GPP_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Pin pip and install locked Python dependencies (regenerate via pip-compile).
+ARG PIP_VERSION=24.3.1
+COPY requirements.lock .
+RUN pip install --no-cache-dir "pip==${PIP_VERSION}" && \
+    pip install --no-cache-dir --prefix=/install -r requirements.lock
 
 # -----------------------------------------------------------------------------
 # Stage 2 — Runtime
