@@ -10,7 +10,7 @@
 
 This repository implements a **transparent FastAPI proxy** in front of [vLLM](https://github.com/vllm-project/vllm) that measures **Time-To-First-Token (TTFT)**, **Time-Between-Tokens (TBT)**, and **end-to-end latency**, exposing them via HTTP headers, OpenAI-compatible `usage` fields, SSE comment frames, Prometheus metrics, and optional OpenTelemetry traces.
 
-The platform targets **MLOps / AI infrastructure** portfolios with Docker Compose (local GPU), Kubernetes manifests, Helm charts, and a GitHub Actions CI/CD pipeline.
+The platform provides a complete **MLOps / AI infrastructure** reference implementation with Docker Compose (local GPU), Kubernetes manifests, Helm charts, and a GitHub Actions CI/CD pipeline.
 
 ---
 

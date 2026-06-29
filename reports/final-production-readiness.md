@@ -179,6 +179,6 @@ helm upgrade --install latency-metrics ./helm -n vllm --create-namespace \
 
 ## Conclusion
 
-The repository is ** suitable as a flagship AI infrastructure portfolio project** with clear deployment paths, observability hooks, and automated quality gates. Complete production deployment requires publishing the container image and configuring secrets/TLS in the target cluster — steps that require human credentials outside this environment.
+The repository is a **production-capable AI inference observability platform** with clear deployment paths, observability hooks, and automated quality gates. Complete production deployment requires publishing the container image and configuring secrets/TLS in the target cluster — steps that require credentials outside this environment.
 
 **Recommended next action:** Merge to `main` to trigger CI image publish, then `helm upgrade` with `values-prod.yaml` or `values-docker-desktop.yaml` on your cluster.
