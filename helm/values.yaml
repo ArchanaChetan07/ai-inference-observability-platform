@@ -1,0 +1,132 @@
+# =============================================================================
+# vLLM Latency Metrics — Helm Values
+# =============================================================================
+# Install: helm install latency-metrics ./helm -n vllm --create-namespace
+# Override: helm install latency-metrics ./helm --set vllm.model=meta-llama/Llama-3.2-1B
+
+global:
+  namespace: vllm
+
+# ---------------------------------------------------------------------------
+# vLLM inference server
+# ---------------------------------------------------------------------------
+vllm:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vllm/vllm-openai
+    tag: v0.4.3
+    pullPolicy: IfNotPresent
+  model: facebook/opt-1.3b
+  dtype: float16
+  maxModelLen: 2048
+  gpuMemoryUtilization: "0.85"
+  attentionBackend: XFORMERS
+  gpuCount: 1
+  hfTokenSecretName: hf-token
+  hfTokenSecretKey: HF_TOKEN
+  persistence:
+    enabled: true
+    size: 20Gi
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: 32Gi
+      nvidia.com/gpu: "1"
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  extraEnv: {}
+
+# ---------------------------------------------------------------------------
+# Latency metrics proxy
+# ---------------------------------------------------------------------------
+proxy:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/your-username/vllm-latency-proxy
+    tag: "1.2.0"
+    pullPolicy: IfNotPresent
+  port: 8080
+  statsWindow: 1000
+  logLevel: INFO
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8080
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  extraEnv: {}
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry
+# ---------------------------------------------------------------------------
+opentelemetry:
+  enabled: false
+  serviceName: vllm-latency-proxy
+  exporter:
+    endpoint: http://otel-collector:4317
+    protocol: grpc
+  collector:
+    enabled: false
+    image: otel/opentelemetry-collector-contrib:0.96.0
+
+# ---------------------------------------------------------------------------
+# Monitoring stack (in-cluster, optional)
+# ---------------------------------------------------------------------------
+prometheus:
+  enabled: false
+  image: prom/prometheus:v2.51.0
+  retention: 30d
+  service:
+    port: 9090
+
+grafana:
+  enabled: false
+  image: grafana/grafana:10.4.0
+  adminPassword: admin
+  service:
+    port: 3000
+
+serviceMonitor:
+  enabled: false
+  interval: 15s
+
+# ---------------------------------------------------------------------------
+# Ingress (optional)
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  host: vllm.example.com
+  tls: false
+
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+affinity: {}

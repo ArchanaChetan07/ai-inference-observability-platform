@@ -1,0 +1,113 @@
+{{- if .Values.vllm.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-vllm
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+spec:
+  replicas: {{ .Values.vllm.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: vllm
+  template:
+    metadata:
+      labels:
+        {{- include "vllm-latency-metrics.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: vllm
+    spec:
+      {{- with .Values.vllm.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllm.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vllm
+          image: "{{ .Values.vllm.image.repository }}:{{ .Values.vllm.image.tag }}"
+          imagePullPolicy: {{ .Values.vllm.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.vllm.service.port }}
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vllm.hfTokenSecretName }}
+                  key: {{ .Values.vllm.hfTokenSecretKey }}
+            - name: VLLM_MODEL
+              value: {{ .Values.vllm.model | quote }}
+            - name: VLLM_DTYPE
+              value: {{ .Values.vllm.dtype | quote }}
+            - name: VLLM_MAX_MODEL_LEN
+              value: {{ .Values.vllm.maxModelLen | quote }}
+            - name: VLLM_GPU_MEMORY_UTILIZATION
+              value: {{ .Values.vllm.gpuMemoryUtilization | quote }}
+            - name: VLLM_ATTENTION_BACKEND
+              value: {{ .Values.vllm.attentionBackend | quote }}
+            {{- range $k, $v := .Values.vllm.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              exec python3 -m vllm.entrypoints.openai.api_server \
+                --model "${VLLM_MODEL}" \
+                --dtype "${VLLM_DTYPE}" \
+                --max-model-len "${VLLM_MAX_MODEL_LEN}" \
+                --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION}" \
+                --disable-log-requests
+          resources:
+            requests:
+              cpu: {{ .Values.vllm.resources.requests.cpu | quote }}
+              memory: {{ .Values.vllm.resources.requests.memory }}
+              nvidia.com/gpu: {{ .Values.vllm.gpuCount | quote }}
+            limits:
+              {{- if .Values.vllm.resources.limits.cpu }}
+              cpu: {{ .Values.vllm.resources.limits.cpu | quote }}
+              {{- end }}
+              {{- if .Values.vllm.resources.limits.memory }}
+              memory: {{ .Values.vllm.resources.limits.memory }}
+              {{- end }}
+              nvidia.com/gpu: {{ .Values.vllm.gpuCount | quote }}
+          {{- if .Values.vllm.persistence.enabled }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 10
+      {{- if .Values.vllm.persistence.enabled }}
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: {{ include "vllm-latency-metrics.fullname" . }}-hf-cache
+      {{- end }}
+{{- end }}

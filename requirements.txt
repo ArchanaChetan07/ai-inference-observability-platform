@@ -1,0 +1,15 @@
+# Production dependencies
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+uvloop>=0.19.0
+httpx>=0.27.0
+prometheus-client>=0.20.0
+
+# OpenTelemetry (optional at runtime — disabled unless OTEL_ENABLED=true)
+opentelemetry-api>=1.24.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-otlp-proto-grpc>=1.24.0
+opentelemetry-exporter-otlp-proto-http>=1.24.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-httpx>=0.45b0
+opentelemetry-semantic-conventions>=0.45b0

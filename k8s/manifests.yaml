@@ -1,0 +1,308 @@
+---
+# =============================================================================
+# vLLM Latency Metrics Proxy — Kubernetes Manifests (legacy monolith)
+# =============================================================================
+# DEPRECATED: Use modular manifests instead:
+#   kubectl apply -k k8s/
+#
+# This file is kept for backward compatibility. It mirrors k8s/kustomization.yaml
+# resources in a single document.
+#
+# Apply with: kubectl apply -f k8s/manifests.yaml
+# Preferred:  kubectl apply -k k8s/
+
+# ---------------------------------------------------------------------------
+# Namespace
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vllm
+  labels:
+    app.kubernetes.io/part-of: vllm-latency-metrics
+
+---
+# ---------------------------------------------------------------------------
+# Secret — HuggingFace token
+# Create with: kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_... -n vllm
+# ---------------------------------------------------------------------------
+# (Secret not included in manifest — create out-of-band)
+
+---
+# ---------------------------------------------------------------------------
+# ConfigMap — shared configuration
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-latency-config
+  namespace: vllm
+data:
+  VLLM_MODEL: "facebook/opt-1.3b"
+  VLLM_DTYPE: "float16"
+  VLLM_MAX_MODEL_LEN: "2048"
+  VLLM_GPU_MEMORY_UTILIZATION: "0.85"
+  VLLM_ATTENTION_BACKEND: "XFORMERS"
+  PROXY_STATS_WINDOW: "1000"
+  PROXY_LOG_LEVEL: "INFO"
+
+---
+# ---------------------------------------------------------------------------
+# PersistentVolumeClaim — HuggingFace model cache
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache
+  namespace: vllm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# ---------------------------------------------------------------------------
+# Deployment — vLLM
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: vllm
+  labels:
+    app: vllm
+    component: inference-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+        component: inference-server
+    spec:
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.4.3
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            - name: VLLM_ATTENTION_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_ATTENTION_BACKEND
+          args:
+            - "--model"
+            - "$(VLLM_MODEL)"
+            - "--dtype"
+            - "$(VLLM_DTYPE)"
+            - "--max-model-len"
+            - "$(VLLM_MAX_MODEL_LEN)"
+            - "--gpu-memory-utilization"
+            - "$(VLLM_GPU_MEMORY_UTILIZATION)"
+            - "--disable-log-requests"
+          envFrom:
+            - configMapRef:
+                name: vllm-latency-config
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 10
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache
+
+---
+# ---------------------------------------------------------------------------
+# Service — vLLM (ClusterIP, internal only)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: vllm
+spec:
+  selector:
+    app: vllm
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP
+
+---
+# ---------------------------------------------------------------------------
+# Deployment — Latency Proxy (Project 1A)
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+  labels:
+    app: vllm-latency-proxy
+    component: metrics-proxy
+    project: 1a
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vllm-latency-proxy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: vllm-latency-proxy
+        component: metrics-proxy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: proxy
+          image: ghcr.io/your-username/vllm-latency-proxy:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: VLLM_BASE_URL
+              value: "http://vllm:8000"
+            - name: PROXY_PORT
+              value: "8080"
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: STATS_WINDOW
+              value: "1000"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+
+---
+# ---------------------------------------------------------------------------
+# Service — Proxy (LoadBalancer, external)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+  labels:
+    app: vllm-latency-proxy
+spec:
+  selector:
+    app: vllm-latency-proxy
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  type: LoadBalancer
+
+---
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler — Proxy
+# ---------------------------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm-latency-proxy
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ---------------------------------------------------------------------------
+# PodDisruptionBudget — Proxy
+# ---------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: vllm-latency-proxy

@@ -1,0 +1,102 @@
+# =============================================================================
+# vLLM Latency Metrics Proxy — Helm Values
+# =============================================================================
+# Override any value with: helm install ... --set key=value
+# or:                       helm install ... -f my-values.yaml
+
+# ---------------------------------------------------------------------------
+# vLLM configuration
+# ---------------------------------------------------------------------------
+vllm:
+  enabled: true
+  image:
+    repository: vllm/vllm-openai
+    tag: "v0.4.3"
+    pullPolicy: IfNotPresent
+  model: "facebook/opt-1.3b"
+  maxModelLen: 2048
+  gpuMemoryUtilization: "0.85"
+  attentionBackend: "XFORMERS"   # Required for Turing (T1000, T4)
+  dtype: "float16"
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "4"
+      memory: "16Gi"
+      nvidia.com/gpu: "1"
+    limits:
+      nvidia.com/gpu: "1"
+  hfTokenSecretName: "hf-token"  # k8s secret with key HF_TOKEN
+  service:
+    type: ClusterIP
+    port: 8000
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 120
+    periodSeconds: 15
+    failureThreshold: 10
+
+# ---------------------------------------------------------------------------
+# Proxy configuration (Project 1A)
+# ---------------------------------------------------------------------------
+proxy:
+  enabled: true
+  image:
+    repository: ghcr.io/your-username/vllm-latency-proxy
+    tag: "latest"
+    pullPolicy: Always
+  replicaCount: 2
+  statsWindow: 1000
+  logLevel: "INFO"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "1Gi"
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8080
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  host: vllm.example.com
+  tls: false
+
+# ---------------------------------------------------------------------------
+# Monitoring
+# ---------------------------------------------------------------------------
+monitoring:
+  serviceMonitor:
+    enabled: false        # Set true if Prometheus Operator is installed
+    namespace: monitoring
+    interval: 15s
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+nodeSelector: {}
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+affinity: {}

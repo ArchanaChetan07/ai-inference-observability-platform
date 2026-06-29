@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vllm
+  labels:
+    app.kubernetes.io/part-of: vllm-latency-metrics
+    app.kubernetes.io/managed-by: kubectl

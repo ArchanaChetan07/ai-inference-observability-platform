@@ -1,0 +1,67 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: vllm-latency-proxy
+        static_configs:
+          - targets:
+              - {{ include "vllm-latency-metrics.fullname" . }}-proxy:{{ .Values.proxy.service.port }}
+        metrics_path: /metrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "vllm-latency-metrics.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+          ports:
+            - containerPort: {{ .Values.prometheus.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "vllm-latency-metrics.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+  ports:
+    - port: {{ .Values.prometheus.service.port }}
+      targetPort: {{ .Values.prometheus.service.port }}
+{{- end }}

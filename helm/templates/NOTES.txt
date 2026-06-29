@@ -1,0 +1,72 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Version:   {{ .Chart.AppVersion }}
+
+================================================================================
+  vLLM Latency Metrics — Deployment Summary
+================================================================================
+
+{{- if .Values.proxy.enabled }}
+
+PROXY (OpenAI-compatible API with TTFT/TBT metrics)
+----------------------------------------------------
+  Service: {{ include "vllm-latency-metrics.fullname" . }}-proxy
+  Port:    {{ .Values.proxy.service.port }} → container {{ .Values.proxy.port }}
+
+  Get external URL (LoadBalancer):
+    export PROXY_URL=$(kubectl get svc {{ include "vllm-latency-metrics.fullname" . }}-proxy \
+      -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    echo "http://${PROXY_URL}:{{ .Values.proxy.service.port }}"
+
+  Port-forward (local dev):
+    kubectl port-forward svc/{{ include "vllm-latency-metrics.fullname" . }}-proxy \
+      8080:{{ .Values.proxy.service.port }} -n {{ .Release.Namespace }}
+
+  Test:
+    curl http://localhost:8080/health
+    curl http://localhost:8080/metrics
+
+{{- end }}
+
+{{- if .Values.vllm.enabled }}
+
+vLLM (upstream inference)
+-------------------------
+  Service: {{ include "vllm-latency-metrics.fullname" . }}-vllm:{{ .Values.vllm.service.port }}
+  Model:   {{ .Values.vllm.model }}
+  GPUs:    {{ .Values.vllm.gpuCount }}
+
+  Ensure HuggingFace secret exists:
+    kubectl create secret generic {{ .Values.vllm.hfTokenSecretName }} \
+      --from-literal={{ .Values.vllm.hfTokenSecretKey }}=hf_YOUR_TOKEN \
+      -n {{ .Release.Namespace }}
+
+{{- end }}
+
+{{- if .Values.prometheus.enabled }}
+
+Prometheus: {{ include "vllm-latency-metrics.fullname" . }}-prometheus:{{ .Values.prometheus.service.port }}
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+
+Grafana:    {{ include "vllm-latency-metrics.fullname" . }}-grafana:{{ .Values.grafana.service.port }}
+  Default credentials: admin / {{ .Values.grafana.adminPassword }}
+{{- end }}
+
+{{- if .Values.opentelemetry.enabled }}
+
+OpenTelemetry: enabled
+  OTLP endpoint: {{ .Values.opentelemetry.exporter.endpoint }}
+  View traces in Jaeger/Tempo after configuring your collector backend.
+{{- end }}
+
+SCALING
+-------
+  Proxy HPA: {{ .Values.proxy.autoscaling.enabled }} ({{ .Values.proxy.autoscaling.minReplicas }}-{{ .Values.proxy.autoscaling.maxReplicas }} replicas)
+
+DOCUMENTATION
+-------------
+  https://github.com/your-username/vllm-latency-metrics#kubernetes
