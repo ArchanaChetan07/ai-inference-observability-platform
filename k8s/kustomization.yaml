@@ -13,6 +13,7 @@ resources:
   - proxy-deployment.yaml
   - proxy-service.yaml
   - networkpolicy.yaml
+  - priorityclass.yaml
   - hpa.yaml
   - pdb.yaml
 

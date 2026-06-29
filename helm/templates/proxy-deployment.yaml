@@ -35,6 +35,22 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      {{- if .Values.priorityClass.enabled }}
+      priorityClassName: {{ include "vllm-latency-metrics.fullname" . }}-inference
+      {{- end }}
+      {{- if .Values.proxy.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "vllm-latency-metrics.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: proxy
+      {{- else if .Values.proxy.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.proxy.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
       containers:
         - name: proxy
           image: "{{ .Values.proxy.image.repository }}:{{ .Values.proxy.image.tag }}"

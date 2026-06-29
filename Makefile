@@ -6,7 +6,7 @@
         lint format typecheck docker-build docker-run stack-up stack-down \
         benchmark clean
 
-VLLM_URL ?= http://localhost:8080
+VLLM_URL ?= http://localhost:8082
 VLLM_MODEL ?= facebook/opt-1.3b
 HF_TOKEN ?= $(shell echo $$HF_TOKEN)
 

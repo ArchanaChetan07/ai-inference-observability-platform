@@ -35,6 +35,7 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 | **Proxy overhead** | ≤ 4% RPS · ≤ 31 ms TTFT P99 @ concurrency 5 |
 | **Test coverage** | 48 automated tests (unit · integration · regression · concurrent) |
 | **Production stack** | Kubernetes · Helm · Prometheus · Grafana · Alertmanager · OpenTelemetry |
+| **Production readiness** | [100 / 100](reports/production-readiness-100.md) |
 
 ---
 

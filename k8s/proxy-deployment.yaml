@@ -28,6 +28,7 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: vllm-latency-proxy
+      priorityClassName: vllm-inference
       securityContext:
         runAsNonRoot: true
         seccompProfile:

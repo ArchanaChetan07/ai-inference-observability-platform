@@ -17,6 +17,10 @@ data:
             - targets:
                 - {{ include "vllm-latency-metrics.fullname" . }}-alertmanager:{{ .Values.prometheus.alertmanager.service.port }}
     {{- end }}
+    {{- if .Values.prometheus.alertRules.enabled }}
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    {{- end }}
     scrape_configs:
       {{- if .Values.proxy.enabled }}
       - job_name: vllm-latency-proxy
@@ -41,6 +45,10 @@ data:
         scrape_interval: {{ .scrape_interval }}
         {{- end }}
       {{- end }}
+  {{- if .Values.prometheus.alertRules.enabled }}
+  alerts.yml: |
+{{ .Files.Get "files/alerts.yml" | indent 4 }}
+  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment

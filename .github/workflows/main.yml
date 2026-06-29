@@ -45,6 +45,12 @@ jobs:
           pip install -r requirements.txt
           mypy
 
+      - name: Hadolint Dockerfile lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          failure-threshold: warning
+
   test:
     name: Test Suite (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -224,8 +230,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     outputs:
       image-tag: ${{ steps.image.outputs.tag }}
+      image-digest: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -266,6 +274,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Push to GHCR
+        id: push
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/build-push-action@v6
         with:
@@ -276,6 +285,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           platforms: linux/amd64
+
+      - name: Install Cosign
+        if: steps.push.outcome == 'success'
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign container image (keyless)
+        if: steps.push.outcome == 'success'
+        run: |
+          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
 
       - name: Save image for scan job
         run: docker save ${{ steps.image.outputs.tag }} -o /tmp/image.tar

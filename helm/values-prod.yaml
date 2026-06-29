@@ -17,20 +17,27 @@ proxy:
     repository: ghcr.io/ArchanaChetan07/vllm-latency-proxy
     tag: "1.2.0"
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
   autoscaling:
     enabled: true
     minReplicas: 2
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
+  topologySpread:
+    enabled: true
 
 prometheus:
   enabled: true
   retention: 30d
   alertmanager:
     enabled: true
+  alertRules:
+    enabled: true
 
 grafana:
   enabled: true
+  adminPassword: changeme-prod
 
 opentelemetry:
   enabled: true
@@ -40,3 +47,16 @@ networkPolicy:
 
 podDisruptionBudget:
   enabled: true
+
+priorityClass:
+  enabled: true
+
+ingress:
+  enabled: true
+  host: inference.example.com
+  tls: true
+  tlsSecretName: vllm-latency-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
