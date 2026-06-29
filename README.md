@@ -586,36 +586,6 @@ curl -s http://localhost:8080/health | python -m json.tool
 
 ---
 
-## Production readiness (self-review)
-
-| Area | Score | Notes |
-|------|-------|-------|
-| Proxy correctness & perf | 9/10 | ≤4% overhead measured; streaming stall fixed |
-| K8s / Helm | 9/10 | GPU scheduling, HPA, PDB, modular manifests |
-| Observability | 9/10 | Prometheus + OTel OTLP; Grafana dashboard included |
-| Multi-node design | 8/10 | Documented; full TP cluster needs GPU fleet |
-| Security / ops hardening | 7/10 | NetworkPolicies, image signing, runbooks TBD |
-
-**Overall: 9.0 / 10** — suitable for open-source contribution and production sidecar deployment. Remaining gaps: NetworkPolicies, CI helm/kubeconform gate, upstream engine merge.
-
----
-
-## Contributing
-
-1. Fork → branch → tests → `make test lint` → PR  
-2. Performance changes must include benchmark output  
-3. Upstream work: start with [`vllm_patch/engine_patch.py`](vllm_patch/engine_patch.py) + [`docs/PR_DESCRIPTION.md`](docs/PR_DESCRIPTION.md)
-
-See [CHANGELOG.md](CHANGELOG.md).
-
----
-
-## License
-
-[MIT](LICENSE)
-
----
-
 ## Acknowledgements
 
 [vLLM](https://github.com/vllm-project/vllm) · [Prometheus](https://prometheus.io/) · [Grafana](https://grafana.com/) · [FastAPI](https://fastapi.tiangolo.com/) · [Docker](https://www.docker.com/)
