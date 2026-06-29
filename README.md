@@ -13,7 +13,7 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](docs/API.md)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP-000000?logo=opentelemetry&logoColor=white)](docs/opentelemetry.md)
 
-[Quick Start](#quick-start) · [Documentation](#documentation) · [Architecture](#architecture) · [Deployment](#production-deployment) · [Benchmarks](#benchmarks)
+[Quick Start](#quick-start) · [Docs](docs/deployment-guide.md) · [Architecture](#architecture) · [Deployment](#production-deployment) · [Benchmarks](#benchmarks)
 
 </div>
 
