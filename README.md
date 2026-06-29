@@ -14,7 +14,7 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](monitoring/)
 [![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](monitoring/)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP-000000?logo=opentelemetry&logoColor=white)](docs/opentelemetry.md)
-[![CI/CD](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=githubactions&logoColor=white)](.github/workflows/main.yml)
+[![CI/CD](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml/badge.svg)](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml)
 [![Tests](https://img.shields.io/badge/Tests-48_passing-success)](tests/)
 
 [Quick Start](#quick-start) · [Architecture](#architecture) · [Observability](#observability) · [Deployment](#production-deployment) · [Documentation](#documentation)
