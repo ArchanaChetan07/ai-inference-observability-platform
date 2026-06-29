@@ -1,0 +1,29 @@
+# Docker Desktop Kubernetes — local overlay
+# vLLM runs on Docker Compose (GPU); K8s runs proxy + monitoring.
+
+vllm:
+  enabled: false
+
+proxy:
+  replicaCount: 1
+  image:
+    repository: vllm-latency-proxy
+    tag: "1.2.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+  autoscaling:
+    enabled: false
+  extraEnv:
+    VLLM_BASE_URL: "http://host.docker.internal:8000"
+
+prometheus:
+  enabled: true
+
+grafana:
+  enabled: true
+
+opentelemetry:
+  enabled: false
