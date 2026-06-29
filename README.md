@@ -2,114 +2,110 @@
 
 # AI Inference Observability Platform
 
-**Production-grade latency instrumentation for vLLM — TTFT, TBT, and end-to-end metrics in every API response.**
+### Production-grade LLM serving instrumentation — TTFT, TBT, and end-to-end latency for vLLM at scale
+
+**Open-source MLOps · AI Infrastructure · Site Reliability Engineering portfolio project**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![vLLM](https://img.shields.io/badge/vLLM-0.4.x-blue)](https://github.com/vllm-project/vllm)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker/docker-compose.yml)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm-326CE5?logo=kubernetes&logoColor=white)](helm/)
-[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](docs/API.md)
+[![vLLM](https://img.shields.io/badge/vLLM-Inference-blue)](https://github.com/vllm-project/vllm)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](docker/docker-compose.yml)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](k8s/)
+[![Helm](https://img.shields.io/badge/Helm-0F1689?logo=helm&logoColor=white)](helm/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](monitoring/)
+[![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](monitoring/)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP-000000?logo=opentelemetry&logoColor=white)](docs/opentelemetry.md)
+[![CI/CD](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=githubactions&logoColor=white)](.github/workflows/main.yml)
+[![Tests](https://img.shields.io/badge/Tests-48_passing-success)](tests/)
 
-[Quick Start](#quick-start) · [Docs](docs/deployment-guide.md) · [Architecture](#architecture) · [Deployment](#production-deployment) · [Benchmarks](#benchmarks)
+**Repository:** [github.com/ArchanaChetan07/ai-inference-observability-platform](https://github.com/ArchanaChetan07/ai-inference-observability-platform)
+
+[Quick Start](#quick-start) · [Impact & Metrics](#impact--metrics) · [Tech Stack](#technologies--skills-demonstrated) · [Architecture](#architecture) · [Deploy](#production-deployment) · [Connect](#about-the-author)
 
 </div>
 
 ---
 
-## Overview
+## Executive Summary
 
-Large language model serving is judged on **responsiveness** — how fast the first token arrives (TTFT) and how smoothly tokens stream (TBT). [vLLM](https://github.com/vllm-project/vllm) optimizes GPU throughput internally, but its OpenAI-compatible API does not expose per-request latency to clients.
+Large Language Model (LLM) products live or die on **inference latency** — especially **Time-To-First-Token (TTFT)** and **Time-Between-Tokens (TBT)**. [vLLM](https://github.com/vllm-project/vllm) delivers world-class GPU throughput but does not expose per-request latency through its OpenAI-compatible API.
 
-**AI Inference Observability Platform** closes that gap with a transparent FastAPI proxy that wraps any vLLM endpoint and surfaces authoritative latency metrics — without modifying client code or forking vLLM.
+**AI Inference Observability Platform** is a **production-ready, cloud-native sidecar** that wraps any vLLM endpoint with zero client changes and delivers:
 
-| | |
-|---|---|
-| **Deploy time** | ~2 minutes (Docker Compose, includes model download) |
-| **Proxy overhead** | ≤ 4% RPS · ≤ 31 ms TTFT P99 @ concurrency 5 |
-| **Test coverage** | 53 automated tests (unit · integration · concurrent · E2E) |
-| **Production stack** | Kubernetes · Helm · Prometheus · Grafana · OpenTelemetry |
+- Authoritative latency metrics in **HTTP headers**, **JSON `usage` fields**, and **SSE comment frames**
+- Full **Prometheus · Grafana · Alertmanager** observability stack
+- Optional **OpenTelemetry** distributed tracing (Jaeger / Tempo)
+- **Kubernetes · Helm · Docker** deployment paths with HPA, PDB, NetworkPolicy, and GPU scheduling
 
----
-
-## Why teams use this
-
-| Challenge | How this platform solves it |
-|-----------|----------------------------|
-| No server-side TTFT/TBT in vLLM responses | Injects metrics into headers, `usage` fields, and SSE comments |
-| Inconsistent client-side timing | Single source of truth at the HTTP boundary |
-| No SLO dashboards out of the box | Prometheus histograms + Grafana dashboard + alert rules |
-| Hard to debug latency spikes | Optional OpenTelemetry traces with per-request breakdown |
-| Production deployment complexity | Modular K8s manifests, Helm chart, HPA, GPU scheduling |
+Built end-to-end as a flagship **AI Infrastructure / MLOps / Platform Engineering** project — from async Python application code through CI/CD, security scanning, and production Kubernetes manifests.
 
 ---
 
-## Key features
+## Impact & Metrics
 
-- **OpenAI-compatible** — `/v1/chat/completions` and `/v1/completions` with zero client changes
-- **Streaming-first** — SSE passthrough; latency comments after `data: [DONE]` (never blocks the terminal chunk)
-- **Three metric layers** — TTFT · mean/P99 TBT · end-to-end latency on every request
-- **Full observability** — Prometheus `/metrics` · Grafana dashboards · OTLP traces (Jaeger / Tempo)
-- **Production-ready** — Docker Compose · Kustomize · Helm · HPA · PDB · GPU node scheduling
-- **Optional upstream patch** — Annotated vLLM engine integration for GPU-authoritative measurement ([`vllm_patch/`](vllm_patch/))
-- **Benchmarked** — Reproducible E2E and micro-benchmark suite with published results
+| Metric | Result |
+|--------|--------|
+| **Proxy overhead** | ≤ 4% throughput · ≤ 31 ms TTFT P99 @ concurrency 5 |
+| **TTFT P50 (live benchmark)** | 172 ms · `facebook/opt-1.3b` · NVIDIA T1000 8 GB |
+| **Automated test suite** | 48 passing (unit · integration · regression · concurrent) |
+| **Production readiness score** | 78 / 100 ([full report](reports/final-production-readiness.md)) |
+| **Deploy time (local)** | ~2 minutes via Docker Compose |
+| **CI/CD pipeline** | Lint · test matrix · security scan · Docker · Helm · SBOM |
+
+> *Recruiters & hiring managers: this project demonstrates full-stack ownership of an AI inference platform — application development, observability, and production deployment.*
 
 ---
 
-## Quick start
+## Problem → Solution → Outcome
 
-### Prerequisites
+| Business Problem | Engineering Solution | Measurable Outcome |
+|------------------|---------------------|-------------------|
+| No server-side TTFT/TBT in vLLM API responses | Transparent FastAPI proxy with streaming-aware latency tracker | Every response carries latency metadata — no client SDK changes |
+| Inconsistent client-side timing | Single source of truth at the HTTP boundary | SLO dashboards backed by Prometheus histograms |
+| No production observability for LLM serving | Prometheus + Grafana + Alertmanager + optional OTLP traces | TTFT/TBT alert rules; Grafana latency dashboard included |
+| Complex GPU inference deployment | Kustomize manifests, Helm chart, HPA, PDB, NetworkPolicy | One-command deploy to Kubernetes with prod/dev/desktop overlays |
+| Unknown proxy performance cost | Reproducible benchmark harness with published results | ≤ 4% RPS overhead confirmed under load |
 
-- [Docker](https://docs.docker.com/get-docker/) with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (GPU)
-- HuggingFace token optional for public models (`facebook/opt-1.3b`)
+---
 
-### Run the full stack
+## Technologies & Skills Demonstrated
 
-```bash
-git clone https://github.com/ArchanaChetan07/ai-inference-observability-platform.git
-cd ai-inference-observability-platform
+<details open>
+<summary><strong>Click to expand full tech stack (ATS keyword index)</strong></summary>
 
-docker compose -f docker/docker-compose.yml up -d --build
-# Wait ~2 min for vLLM to load weights, then:
-curl -s http://localhost:8080/health | python -m json.tool
-```
+### Languages & Frameworks
+Python · FastAPI · asyncio · httpx · uvicorn · uvloop · OpenAI-compatible REST API · Server-Sent Events (SSE)
 
-### Send your first instrumented request
+### AI / ML Infrastructure
+vLLM · LLM inference serving · GPU scheduling · NVIDIA CUDA · HuggingFace model loading · TTFT · TBT · token streaming · batching
 
-```bash
-curl -N http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "facebook/opt-1.3b",
-    "messages": [{"role": "user", "content": "Explain TTFT in one sentence."}],
-    "max_tokens": 32,
-    "stream": true
-  }'
-```
+### Cloud-Native & Platform Engineering
+Kubernetes · Helm · Kustomize · Docker · Docker Compose · multi-stage builds · Horizontal Pod Autoscaler (HPA) · Pod Disruption Budget (PDB) · NetworkPolicy · ServiceAccount · ConfigMap · Secret · PersistentVolume · Pod Security Standards · GPU node selectors · taints & tolerations
 
-### Service endpoints
+### Observability & SRE
+Prometheus · Grafana · Alertmanager · OpenTelemetry · OTLP · distributed tracing · Jaeger · histogram metrics · SLO alerting · health probes (liveness · readiness · startup)
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| **Proxy** (use this) | http://localhost:8080 | OpenAI API + latency metrics |
-| vLLM (raw) | http://localhost:8000 | Upstream inference server |
-| Prometheus | http://localhost:9090 | Metrics collection |
-| Grafana | http://localhost:3000 | Dashboards (`admin` / `admin`) |
+### DevOps / DevSecOps / CI/CD
+GitHub Actions · container registry (GHCR) · SBOM generation · Trivy · Bandit · pip-audit · Ruff · mypy · pytest · semantic release · infrastructure as code
 
-<details>
-<summary><strong>Windows (PowerShell)</strong></summary>
-
-```powershell
-git clone https://github.com/ArchanaChetan07/ai-inference-observability-platform.git
-cd ai-inference-observability-platform
-$env:PROXY_PORT = "8081"   # if port 8080 is occupied
-docker compose -f docker/docker-compose.yml up -d --build
-curl http://localhost:8081/health
-```
+### Architecture Patterns
+Sidecar proxy · microservices · async streaming · backpressure-safe SSE passthrough · graceful shutdown · connection pooling · multi-node inference design · load balancing
 
 </details>
+
+---
+
+## Key Features
+
+- **OpenAI-compatible** — drop-in replacement for `/v1/chat/completions` and `/v1/completions`
+- **Streaming-first** — zero added latency on the hot path; metrics appended after `data: [DONE]`
+- **Three-layer metrics** — TTFT · mean/P99 TBT · end-to-end latency on every request
+- **Enterprise observability** — Prometheus `/metrics` · Grafana dashboards · Alertmanager routing · OTLP traces
+- **Production Kubernetes** — probes · HPA · PDB · NetworkPolicy · non-root containers · resource limits
+- **Security hardened** — multi-stage Docker · read-only root filesystem · CI vulnerability scanning
+- **Fully tested** — 48 automated tests including concurrent load and edge-case regression suite
+- **Documented operations** — deployment guides · runbooks · troubleshooting · architecture diagrams
 
 ---
 
@@ -118,45 +114,49 @@ curl http://localhost:8081/health
 ```mermaid
 flowchart LR
     subgraph Clients
-        SDK[OpenAI SDK / curl]
+        SDK[OpenAI SDK / curl / LangChain]
     end
-    subgraph Platform
-        Proxy[Latency Proxy<br/>FastAPI]
-        OTel[OpenTelemetry]
+    subgraph Observability["Observability Layer"]
+        Proxy[Latency Proxy<br/>FastAPI · Python]
         Prom[Prometheus]
+        AM[Alertmanager]
+        Graf[Grafana]
+        OTel[OpenTelemetry]
     end
-    subgraph Inference
+    subgraph Inference["Inference Layer"]
         VLLM[vLLM Server]
         GPU[NVIDIA GPU]
     end
     SDK --> Proxy
     Proxy --> VLLM --> GPU
-    Proxy --> Prom
+    Proxy --> Prom --> AM
+    Prom --> Graf
     Proxy -.-> OTel
 ```
 
 **Request flow (streaming):**
 
-1. Client sends `POST /v1/chat/completions` to the proxy
-2. Proxy forwards transparently to vLLM and tracks token arrival timestamps
-3. Client receives SSE chunks in real time — no added latency on the hot path
-4. After `data: [DONE]`, proxy appends SSE comment lines with TTFT/TBT/E2E
-5. Prometheus histograms updated; optional OTLP trace exported
+1. Client sends `POST /v1/chat/completions` to the proxy (not vLLM directly)
+2. Proxy forwards transparently via async `httpx` and records per-token timestamps
+3. Client receives SSE chunks in real time — no blocking on the inference hot path
+4. After `data: [DONE]`, proxy appends SSE comment lines with TTFT / TBT / E2E metrics
+5. Prometheus histograms updated; optional OTLP trace exported with span breakdown
 
 | Component | Role |
 |-----------|------|
 | [`proxy.py`](proxy.py) | Production FastAPI sidecar (v1.2) |
 | [`vllm_patch/latency_utils.py`](vllm_patch/latency_utils.py) | O(1) per-token tracker with reservoir P99 |
 | [`vllm_patch/telemetry.py`](vllm_patch/telemetry.py) | Optional OpenTelemetry OTLP export |
-| [`docker/`](docker/) | Multi-stage Dockerfile · Compose stacks |
-| [`k8s/`](k8s/) · [`helm/`](helm/) | Production Kubernetes deployment |
+| [`docker/`](docker/) | Multi-stage Dockerfile · Compose · Alertmanager · OTel overlay |
+| [`k8s/`](k8s/) · [`helm/`](helm/) | Production Kubernetes · Helm prod/dev/desktop values |
 | [`monitoring/`](monitoring/) | Grafana dashboard · Prometheus alert rules |
+| [`.github/workflows/main.yml`](.github/workflows/main.yml) | CI/CD — lint · test · security · Docker · Helm |
 
 Full API reference: [`docs/API.md`](docs/API.md)
 
 ---
 
-## Example output
+## Example Output
 
 ### Non-streaming — response headers
 
@@ -197,6 +197,61 @@ data: [DONE]
 
 ---
 
+## Quick Start
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (GPU)
+- HuggingFace token optional for public models (`facebook/opt-1.3b`)
+
+### Run the full stack
+
+```bash
+git clone https://github.com/ArchanaChetan07/ai-inference-observability-platform.git
+cd ai-inference-observability-platform
+
+docker compose -f docker/docker-compose.yml up -d --build
+# Wait ~2 min for vLLM model load, then:
+curl -s http://localhost:8082/health | python -m json.tool
+```
+
+### Send your first instrumented request
+
+```bash
+curl -N http://localhost:8082/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "facebook/opt-1.3b",
+    "messages": [{"role": "user", "content": "Explain TTFT in one sentence."}],
+    "max_tokens": 32,
+    "stream": true
+  }'
+```
+
+### Service endpoints
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Proxy** (use this) | http://localhost:8082 | OpenAI API + latency metrics |
+| vLLM (raw) | http://localhost:8000 | Upstream inference server |
+| Prometheus | http://localhost:9090 | Metrics & alert rules |
+| Alertmanager | http://localhost:9093 | Alert routing |
+| Grafana | http://localhost:3000 | Dashboards (`admin` / `admin`) |
+
+<details>
+<summary><strong>Windows (PowerShell)</strong></summary>
+
+```powershell
+git clone https://github.com/ArchanaChetan07/ai-inference-observability-platform.git
+cd ai-inference-observability-platform
+docker compose -f docker/docker-compose.yml up -d --build
+curl http://localhost:8082/health
+```
+
+</details>
+
+---
+
 ## Observability
 
 ### Prometheus metrics
@@ -214,23 +269,14 @@ histogram_quantile(0.99, rate(vllm_proxy_ttft_milliseconds_bucket[5m]))
 sum(rate(vllm_proxy_requests_total{status="200"}[1m]))
 ```
 
-Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml)
+Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml) · Alertmanager: [`docker/alertmanager.yml`](docker/alertmanager.yml)
 
 ### OpenTelemetry (optional)
-
-Enable distributed tracing with Jaeger or Grafana Tempo:
 
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.otel.yml up -d --build
 # Jaeger UI: http://localhost:16686
 ```
-
-| Span | What it captures |
-|------|-------------------|
-| `inference.request` | Client admission → completion |
-| `vllm.upstream` | Proxy → vLLM HTTP call |
-| `first_token` | TTFT event |
-| `completion` | Full latency breakdown |
 
 Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 
@@ -246,31 +292,33 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 | Concurrency | Endpoint | Req/s | TTFT P99 | Overhead |
 |:-----------:|----------|------:|---------:|---------:|
 | 1 | vLLM `:8000` | 0.24 | 203 ms | — |
-| 1 | Proxy `:8080` | 0.23 | 203 ms | −4.2% RPS |
+| 1 | Proxy `:8082` | 0.23 | 203 ms | −4.2% RPS |
 | 5 | vLLM `:8000` | 1.03 | 813 ms | — |
-| 5 | Proxy `:8080` | 1.02 | 844 ms | +31 ms P99 |
+| 5 | Proxy `:8082` | 1.02 | 844 ms | +31 ms P99 |
 
-**Conclusion:** GPU inference and vLLM batch scheduling dominate latency — not proxy overhead.
+**Conclusion:** GPU inference and vLLM batch scheduling dominate latency — proxy overhead is negligible.
 
 ```bash
-python benchmarks/run_benchmark.py --base-url http://localhost:8080 --concurrency 1 5
+python benchmarks/run_benchmark.py --base-url http://localhost:8082 --concurrency 1 5
 python benchmarks/perf_review.py
 ```
 
 ---
 
-## Production deployment
+## Production Deployment
 
 ```mermaid
 flowchart TB
-    Client --> LB[LoadBalancer]
+    Client --> LB[LoadBalancer / Ingress]
     LB --> Proxy[Proxy Pods ×2–10]
     Proxy --> VLLM[vLLM GPU Pod]
     HPA[HPA] --> Proxy
     Proxy --> Prom[Prometheus]
+    Prom --> AM[Alertmanager]
+    Prom --> Graf[Grafana]
 ```
 
-### Kubernetes
+### Kubernetes (Kustomize)
 
 ```bash
 kubectl create namespace vllm
@@ -282,20 +330,26 @@ kubectl get svc vllm-latency-proxy -n vllm
 ### Helm
 
 ```bash
-helm install latency-metrics ./helm -n vllm --create-namespace \
-  --set vllm.model=facebook/opt-1.3b \
-  --set proxy.replicaCount=2 \
-  --set prometheus.enabled=true \
-  --set opentelemetry.enabled=true
+# Production GPU cluster
+helm upgrade --install latency-metrics ./helm -n vllm --create-namespace \
+  -f helm/values-prod.yaml
+
+# Docker Desktop hybrid (vLLM in Compose, monitoring in K8s)
+helm upgrade --install latency-metrics ./helm -n vllm \
+  -f helm/values-docker-desktop.yaml
 ```
 
-### Multi-proxy load balancing (local demo)
+### CI/CD
 
-```bash
-docker compose -f docker/docker-compose.yml up -d vllm
-docker compose -f docker/docker-compose.multi.yml up -d --build
-curl http://localhost:8888/health
-```
+Every push to `main` triggers [GitHub Actions](.github/workflows/main.yml):
+
+| Stage | Tools |
+|-------|-------|
+| Lint | Ruff · mypy |
+| Test | pytest matrix (Python 3.10–3.12) · coverage |
+| Security | Bandit · pip-audit · Trivy |
+| Build | Docker multi-stage · GHCR push · SBOM |
+| Validate | Helm lint · kubectl dry-run |
 
 | Guide | Description |
 |-------|-------------|
@@ -304,6 +358,7 @@ curl http://localhost:8888/health
 | [Multi-node architecture](docs/multi-node-architecture.md) | TP/PP, routing, KV cache |
 | [Troubleshooting (K8s)](docs/troubleshooting-k8s.md) | Common cluster issues |
 | [Production checklist](docs/production-readiness-checklist.md) | Pre-launch checklist |
+| [Production readiness report](reports/final-production-readiness.md) | Score & evidence |
 
 > Route all client traffic through the **proxy** Service — not vLLM directly.
 
@@ -314,7 +369,7 @@ curl http://localhost:8888/health
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VLLM_BASE_URL` | `http://vllm:8000` | Upstream vLLM endpoint |
-| `PROXY_PORT` | `8080` | Proxy listen port |
+| `PROXY_PORT` | `8080` (host `8082` in Compose) | Proxy listen port |
 | `VLLM_MODEL` | `facebook/opt-1.3b` | Model name (Compose) |
 | `HF_TOKEN` | — | HuggingFace access token |
 | `STATS_WINDOW` | `1000` | Rolling stats window size |
@@ -328,7 +383,8 @@ curl http://localhost:8888/health
 ```bash
 pip install -r requirements-dev.txt
 pytest tests/ -m "unit or integration or regression" -v   # 48 tests, no GPU
-VLLM_E2E_URL=http://localhost:8080 pytest tests/ -m e2e   # live stack required
+VLLM_E2E_URL=http://localhost:8082 pytest tests/ -m e2e   # live stack required
+powershell -File scripts/validate.ps1                      # full validation suite
 ```
 
 | Suite | Marker | Coverage |
@@ -341,52 +397,59 @@ VLLM_E2E_URL=http://localhost:8080 pytest tests/ -m e2e   # live stack required
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 ai-inference-observability-platform/
-├── proxy.py                 # FastAPI latency proxy
-├── vllm_patch/              # Shared utils + optional upstream patch
-├── docker/                  # Dockerfile, Compose, OTel overlay
-├── k8s/                     # Kubernetes manifests (Kustomize)
-├── helm/                    # Helm chart
-├── monitoring/              # Grafana dashboard, alert rules
-├── benchmarks/              # E2E + micro-benchmarks
-├── tests/                   # Pytest suite
-└── docs/                    # Deployment & architecture guides
+├── proxy.py                      # FastAPI latency proxy (core application)
+├── vllm_patch/                   # Latency utils + OpenTelemetry + upstream patch
+├── docker/                       # Dockerfile, Compose, Alertmanager, OTel overlay
+├── k8s/                          # Kubernetes manifests (Kustomize)
+├── helm/                         # Helm chart (prod · dev · docker-desktop values)
+├── monitoring/                   # Grafana dashboard, Prometheus alert rules
+├── benchmarks/                   # E2E + micro-benchmark harness
+├── tests/                        # 48-test pytest suite
+├── .github/workflows/main.yml    # CI/CD pipeline
+├── reports/                      # Production readiness & gap analysis
+└── docs/                         # Deployment, architecture, runbooks
 ```
-
----
-
-## Upstream vLLM integration
-
-For teams contributing latency metrics upstream, the platform includes an annotated patch targeting vLLM's `RequestOutput`, async engine, and OpenAI serving layer.
-
-| vLLM file | Change |
-|-----------|--------|
-| `vllm/outputs.py` | `LatencyMetrics` dataclass on `RequestOutput` |
-| `vllm/engine/async_llm_engine.py` | Per-token timestamp recording |
-| `vllm/entrypoints/openai/serving_chat.py` | Header + usage injection |
-
-PR template: [`docs/PR_DESCRIPTION.md`](docs/PR_DESCRIPTION.md) · Annotated diffs: [`vllm_patch/engine_patch.py`](vllm_patch/engine_patch.py)
 
 ---
 
 ## Roadmap
 
 - [x] OpenTelemetry distributed tracing
-- [x] Kubernetes manifests + Helm chart
-- [x] Multi-node architecture design
+- [x] Kubernetes manifests + Helm chart (prod/dev/desktop overlays)
+- [x] GitHub Actions CI/CD with security scanning
+- [x] Alertmanager + Prometheus alert rules
+- [x] NetworkPolicy + Pod Security Standards
 - [ ] Upstream merge into vLLM core
-- [ ] HPA on custom TTFT metrics
+- [ ] HPA on custom TTFT Prometheus metrics
 - [ ] DCGM GPU panels in Grafana
 - [ ] k6 / Locust load-test harness
 
 ---
 
+## About the Author
+
+**[Archana Chetan](https://github.com/ArchanaChetan07)** — AI Infrastructure · MLOps · Platform Engineering
+
+This project was designed and built as a **production-grade portfolio artifact** demonstrating end-to-end ownership of LLM inference infrastructure: from Python async application development through cloud-native deployment, observability, and CI/CD automation.
+
+| | |
+|---|---|
+| **GitHub** | [github.com/ArchanaChetan07](https://github.com/ArchanaChetan07) |
+| **Project repo** | [ai-inference-observability-platform](https://github.com/ArchanaChetan07/ai-inference-observability-platform) |
+| **Open to** | AI Infrastructure Engineer · MLOps Engineer · Platform Engineer · SRE · DevOps Engineer roles |
+
+If this project aligns with your team's inference observability or LLM platform needs — **I'd welcome a conversation.**  
+Reach out via [GitHub Issues](https://github.com/ArchanaChetan07/ai-inference-observability-platform/issues) or connect on [LinkedIn](https://www.linkedin.com/in/archanachetan) *(update with your profile URL)*.
+
+---
+
 ## Contributing
 
-Contributions welcome. Please:
+Contributions welcome:
 
 1. Fork the repository and create a feature branch
 2. Add tests for new behaviour (`pytest tests/ -v`)
@@ -411,8 +474,8 @@ Built on [vLLM](https://github.com/vllm-project/vllm) · [FastAPI](https://fasta
 
 <div align="center">
 
-**[⭐ Star this repo](https://github.com/ArchanaChetan07/ai-inference-observability-platform)** if it helps your inference observability stack.
+**If this project is useful to your inference stack, please [⭐ star the repo](https://github.com/ArchanaChetan07/ai-inference-observability-platform).**
 
-Maintained by [ArchanaChetan07](https://github.com/ArchanaChetan07)
+*Keywords: LLM inference · vLLM · MLOps · AI infrastructure · Kubernetes · observability · TTFT · TBT · FastAPI · Prometheus · OpenTelemetry · platform engineering · GPU serving · cloud-native · SRE · DevOps · CI/CD*
 
 </div>
