@@ -321,7 +321,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Download image artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: docker-image
           path: /tmp
@@ -383,7 +383,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Download container SBOM
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sbom-container
           path: dist/
