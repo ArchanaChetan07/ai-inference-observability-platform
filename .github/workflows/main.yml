@@ -18,6 +18,9 @@ env:
   PYTHON_VERSION: "3.11"
   HELM_VERSION: v3.14.4
   KUBECONFORM_VERSION: v0.6.7
+  # Official tag (v-prefix required since aquasecurity/trivy-action retagged post-2026-03)
+  # SHA: a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+  TRIVY_ACTION: aquasecurity/trivy-action@v0.36.0
 
 jobs:
   lint:
@@ -83,6 +86,7 @@ jobs:
   helm-k8s:
     name: Helm & Kubernetes Validate
     runs-on: ubuntu-latest
+    needs: lint
     steps:
       - uses: actions/checkout@v4
 
@@ -134,7 +138,11 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [test, helm-k8s]
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -146,29 +154,74 @@ jobs:
       - name: Bandit SAST
         run: |
           pip install bandit
+          bandit -r proxy.py vllm_patch/ -ll -f json -o bandit-results.json
           bandit -r proxy.py vllm_patch/ -ll
 
       - name: pip-audit dependency scan
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
-        continue-on-error: true
+          pip-audit -r requirements.txt --progress-spinner off
 
-      - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Trivy filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
           exit-code: "0"
 
-  docker:
-    name: Docker Build & Scan
+      - name: Trivy license scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: license
+          format: table
+          exit-code: "0"
+
+      - name: Trivy filesystem SBOM (SPDX)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: spdx-json
+          output: sbom-filesystem.spdx.json
+          exit-code: "0"
+
+      - name: Upload filesystem SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-filesystem
+          path: sbom-filesystem.spdx.json
+          retention-days: 30
+
+      - name: Upload Bandit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+          retention-days: 14
+
+      - name: Upload Trivy filesystem SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  docker-build:
+    name: Docker Build
     runs-on: ubuntu-latest
-    needs: [test, helm-k8s, security]
+    needs: security
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -193,40 +246,102 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
+      - id: image
+        run: echo "tag=vllm-latency-proxy:ci-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
       - id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
-          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: ${{ steps.image.outputs.tag }}
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Trivy image scan
-        if: steps.build.outcome == 'success'
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/build-push-action@v6
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-        continue-on-error: true
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          platforms: linux/amd64
 
-      - name: Generate SBOM
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: anchore/sbom-action@v0
+      - name: Save image for scan job
+        run: docker save ${{ steps.image.outputs.tag }} -o /tmp/image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
         with:
-          artifact-name: sbom-vllm-latency-proxy
-          output-file: sbom.spdx.json
-          path: .
-        continue-on-error: true
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+  docker-scan:
+    name: Docker Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load -i /tmp/image.tar
+
+      - name: Trivy container vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ needs.docker-build.outputs.image-tag }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "0"
+
+      - name: Trivy container SBOM (SPDX)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ needs.docker-build.outputs.image-tag }}
+          format: spdx-json
+          output: sbom-container.spdx.json
+          exit-code: "0"
+
+      - name: Upload container SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-container
+          path: sbom-container.spdx.json
+          retention-days: 90
+
+      - name: Upload Trivy container SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-container
 
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [docker]
+    needs: [docker-build, docker-scan]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
@@ -236,6 +351,12 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
+
+      - name: Download container SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-container
+          path: dist/
 
       - name: Package Helm chart
         run: |
@@ -248,11 +369,12 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*.tgz
+            dist/sbom-container.spdx.json
 
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, test, helm-k8s, security, docker]
+    needs: [lint, test, helm-k8s, security, docker-build, docker-scan, release]
     if: always()
     steps:
       - name: Report status
@@ -261,13 +383,35 @@ jobs:
           echo "test=${{ needs.test.result }}"
           echo "helm-k8s=${{ needs.helm-k8s.result }}"
           echo "security=${{ needs.security.result }}"
-          echo "docker=${{ needs.docker.result }}"
-          if [[ "${{ needs.lint.result }}" != "success" ]] || \
-             [[ "${{ needs.test.result }}" != "success" ]] || \
-             [[ "${{ needs.helm-k8s.result }}" != "success" ]] || \
-             [[ "${{ needs.security.result }}" != "success" ]] || \
-             [[ "${{ needs.docker.result }}" != "success" ]]; then
-            echo "One or more CI jobs failed."
+          echo "docker-build=${{ needs.docker-build.result }}"
+          echo "docker-scan=${{ needs.docker-scan.result }}"
+          echo "release=${{ needs.release.result }}"
+
+          failed=0
+          for job in lint test helm-k8s security docker-build docker-scan; do
+            result=""
+            case "$job" in
+              lint) result="${{ needs.lint.result }}" ;;
+              test) result="${{ needs.test.result }}" ;;
+              helm-k8s) result="${{ needs.helm-k8s.result }}" ;;
+              security) result="${{ needs.security.result }}" ;;
+              docker-build) result="${{ needs.docker-build.result }}" ;;
+              docker-scan) result="${{ needs.docker-scan.result }}" ;;
+            esac
+            if [[ "$result" != "success" ]]; then
+              echo "Job $job failed with result=$result"
+              failed=1
+            fi
+          done
+
+          if [[ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]] && \
+             [[ "${{ needs.release.result }}" != "success" ]]; then
+            echo "Release job failed on tag push"
+            failed=1
+          fi
+
+          if [[ "$failed" -eq 1 ]]; then
+            echo "One or more required CI jobs failed."
             exit 1
           fi
-          echo "All CI jobs passed."
+          echo "All required CI jobs passed."
