@@ -188,12 +188,7 @@ curl -s http://localhost:8082/health | python -m json.tool
 ```bash
 curl -N http://localhost:8082/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "facebook/opt-1.3b",
-    "messages": [{"role": "user", "content": "Explain TTFT in one sentence."}],
-    "max_tokens": 32,
-    "stream": true
-  }'
+  -d '{"model":"facebook/opt-1.3b","messages":[{"role":"user","content":"Explain TTFT in one sentence."}],"max_tokens":32,"stream":true}'
 ```
 
 ### Service endpoints
@@ -205,18 +200,6 @@ curl -N http://localhost:8082/v1/chat/completions \
 | Prometheus | http://localhost:9090 | Metrics collection |
 | Alertmanager | http://localhost:9093 | Alert routing |
 | Grafana | http://localhost:3000 | Dashboards (`admin` / `admin`) |
-
-<details>
-<summary><strong>Windows (PowerShell)</strong></summary>
-
-```powershell
-git clone https://github.com/ArchanaChetan07/ai-inference-observability-platform.git
-cd ai-inference-observability-platform
-docker compose -f docker/docker-compose.yml up -d --build
-curl http://localhost:8082/health
-```
-
-</details>
 
 ---
 
@@ -320,14 +303,6 @@ Every push to `main` triggers [GitHub Actions](.github/workflows/main.yml):
 | Build | Docker multi-stage · GHCR push · Cosign keyless signing |
 | Scan | Trivy container SARIF · container SBOM |
 
-Docker builds use pinned apt packages and [`requirements.lock`](requirements.lock) for reproducible installs. Regenerate the lock file when dependencies change:
-
-```bash
-pip-compile requirements.txt -o requirements.lock --strip-extras
-```
-
-> Route all client traffic through the **proxy** Service — not vLLM directly.
-
 ---
 
 ## Configuration
@@ -350,7 +325,6 @@ pip-compile requirements.txt -o requirements.lock --strip-extras
 pip install -r requirements-dev.txt
 pytest tests/ -m "unit or integration or regression" -v   # 48 tests, no GPU
 VLLM_E2E_URL=http://localhost:8082 pytest tests/ -m e2e   # live stack required
-powershell -File scripts/validate.ps1                      # full validation suite
 ```
 
 | Suite | Marker | Coverage |
@@ -360,6 +334,20 @@ powershell -File scripts/validate.ps1                      # full validation sui
 | Concurrent | `integration` | 20 parallel requests, gauge leak |
 | E2E | `e2e` | Live vLLM TTFT + SSE comments |
 | Telemetry | `unit` | OpenTelemetry noop path |
+
+---
+
+## Part of the vLLM Observability Ecosystem
+
+This platform is one piece of a complete LLM serving observability suite:
+
+| Project | What it does |
+|---------|-------------|
+| **[AI Inference Observability Platform](https://github.com/ArchanaChetan07/ai-inference-observability-platform)** ← you are here | FastAPI proxy · TTFT/TBT/E2E · Prometheus · Grafana · Helm |
+| **[KubeInfer](https://github.com/ArchanaChetan07/KubeInfer)** | Production K8s deployment platform · queue-depth HPA · GitOps |
+| **[KV Cache Profiler](https://github.com/ArchanaChetan07/KV-Cache-Profiler-)** | Real-time GPU KV cache hit rate · eviction · memory pressure |
+| **[LLM Benchmarking Dashboard](https://github.com/ArchanaChetan07/LLM-Inference-Benchmarking-Dashboard)** | Live TTFT/TPOT/ITL/E2EL charts · DCGM GPU metrics |
+| **[AI Infrastructure Copilot](https://github.com/ArchanaChetan07/AI-Infrastructure-Copilot)** | Conversational assistant for GPU capacity planning and K8s config |
 
 ---
 
@@ -375,7 +363,7 @@ ai-inference-observability-platform/
 ├── helm/                         # Helm chart (prod · dev · docker-desktop values)
 ├── monitoring/                   # Grafana dashboard, Prometheus alert rules
 ├── benchmarks/                   # E2E + micro-benchmark harness
-├── tests/                        # Pytest suite
+├── tests/                        # Pytest suite (48 tests)
 ├── .github/workflows/main.yml    # CI/CD pipeline
 ├── pyproject.toml                # Ruff, mypy, pytest configuration
 └── docs/                         # Deployment, architecture, runbooks
@@ -399,7 +387,7 @@ ai-inference-observability-platform/
 
 ## Upstream vLLM integration
 
-For teams contributing latency metrics upstream, the platform includes an annotated patch targeting vLLM's `RequestOutput`, async engine, and OpenAI serving layer.
+For teams contributing latency metrics upstream, the platform includes an annotated patch targeting vLLMs `RequestOutput`, async engine, and OpenAI serving layer.
 
 | vLLM file | Change |
 |-----------|--------|
@@ -453,7 +441,8 @@ Built on [vLLM](https://github.com/vllm-project/vllm) · [FastAPI](https://fasta
 
 <div align="center">
 
-Maintained by [ArchanaChetan07](https://github.com/ArchanaChetan07)
+**Archana Suresh Patil** — ML Platform & MLOps Engineer · Sunnyvale, CA  
+[LinkedIn](https://linkedin.com/in/archana-suresh-patil-792213245) · [GitHub](https://github.com/ArchanaChetan07) · Open to full-time · No sponsorship needed
 
 **[⭐ Star this repo](https://github.com/ArchanaChetan07/ai-inference-observability-platform)** if it helps your inference observability stack.
 
