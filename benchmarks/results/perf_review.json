@@ -1,0 +1,84 @@
+{
+  "benchmarks": [
+    {
+      "name": "sse_role_json_always",
+      "iterations": 50000,
+      "total_seconds": 78.2764,
+      "ops_per_sec": 638.7621300928505,
+      "p50_us": 1500,
+      "p99_us": 3200
+    },
+    {
+      "name": "sse_role_fast_path",
+      "iterations": 50000,
+      "total_seconds": 25.4572,
+      "ops_per_sec": 1964.0808887073206,
+      "p50_us": 500,
+      "p99_us": 700
+    },
+    {
+      "name": "body_stream_json_parse",
+      "iterations": 100000,
+      "total_seconds": 174.0949,
+      "ops_per_sec": 574.3993649440621,
+      "p50_us": 1700,
+      "p99_us": 2900
+    },
+    {
+      "name": "body_stream_fast_path",
+      "iterations": 100000,
+      "total_seconds": 48.2391,
+      "ops_per_sec": 2073.0071663857743,
+      "p50_us": 400,
+      "p99_us": 900
+    },
+    {
+      "name": "finalize_32_tokens_reservoir",
+      "iterations": 5000,
+      "total_seconds": 10.4696,
+      "ops_per_sec": 477.5731642087568,
+      "p50_us": 1900,
+      "p99_us": 4400
+    },
+    {
+      "name": "finalize_128_tokens_reservoir",
+      "iterations": 5000,
+      "total_seconds": 28.1811,
+      "ops_per_sec": 177.42387628587954,
+      "p50_us": 4700,
+      "p99_us": 21400
+    },
+    {
+      "name": "finalize_512_tokens_reservoir",
+      "iterations": 5000,
+      "total_seconds": 46.8873,
+      "ops_per_sec": 106.63868467580772,
+      "p50_us": 8000,
+      "p99_us": 28800
+    },
+    {
+      "name": "finalize_2048_tokens_reservoir",
+      "iterations": 5000,
+      "total_seconds": 58.5611,
+      "ops_per_sec": 85.38090985312775,
+      "p50_us": 9000,
+      "p99_us": 34400
+    },
+    {
+      "name": "stats_add_sync_10000",
+      "iterations": 10000,
+      "total_seconds": 0.008468300104141235,
+      "ops_per_sec": 1180874.5411738208,
+      "p50_us": 700,
+      "p99_us": 1000
+    }
+  ],
+  "extras": [
+    {
+      "token_count": 2048,
+      "old_blocked_before_done_us_p99": 41.8,
+      "new_finalize_only_us_p99": 14.6,
+      "client_stall_eliminated": true
+    }
+  ]
+}

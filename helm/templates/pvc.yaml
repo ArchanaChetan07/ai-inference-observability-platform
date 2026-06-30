@@ -1,0 +1,14 @@
+{{- if and .Values.vllm.enabled .Values.vllm.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-hf-cache
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.vllm.persistence.size }}
+{{- end }}

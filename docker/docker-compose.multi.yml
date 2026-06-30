@@ -1,0 +1,51 @@
+# Multi-proxy load-balancing demo — simulates horizontal proxy scaling.
+# Requires base stack: docker compose -f docker/docker-compose.yml up -d vllm
+#
+# Usage:
+#   docker compose -f docker/docker-compose.multi.yml up -d --build
+#
+# Access via nginx LB: http://localhost:8888
+
+networks:
+  vllm-net:
+    external: true
+    name: docker_vllm-net
+
+services:
+  proxy-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: vllm-latency-proxy-1
+    environment:
+      - VLLM_BASE_URL=http://vllm:8000
+      - PROXY_PORT=8080
+    networks:
+      - vllm-net
+    restart: unless-stopped
+
+  proxy-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: vllm-latency-proxy-2
+    environment:
+      - VLLM_BASE_URL=http://vllm:8000
+      - PROXY_PORT=8080
+    networks:
+      - vllm-net
+    restart: unless-stopped
+
+  nginx-lb:
+    image: nginx:1.25-alpine
+    container_name: vllm-lb
+    volumes:
+      - ./nginx-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8888:80"
+    networks:
+      - vllm-net
+    depends_on:
+      - proxy-1
+      - proxy-2
+    restart: unless-stopped

@@ -1,0 +1,449 @@
+name: CI/CD — AI Inference Observability Platform
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/vllm-latency-proxy
+  PYTHON_VERSION: "3.11"
+  HELM_VERSION: v3.14.4
+  KUBECONFORM_VERSION: v0.6.7
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install lint dependencies
+        run: pip install ruff mypy types-requests
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format (Black-compatible)
+        run: ruff format --check .
+
+      - name: mypy type check
+        run: |
+          pip install -r requirements.txt
+          mypy
+
+      - name: Hadolint Dockerfile lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          failure-threshold: warning
+
+  test:
+    name: Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest tests/ -m "unit or integration or regression" \
+            --tb=short \
+            --cov=proxy \
+            --cov=vllm_patch \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+        continue-on-error: true
+
+  helm-k8s:
+    name: Helm & Kubernetes Validate
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint
+        run: |
+          helm lint ./helm
+          helm lint ./helm -f helm/values-prod.yaml
+          helm lint ./helm -f helm/values-dev.yaml
+          helm lint ./helm -f helm/values-docker-desktop.yaml
+
+      - name: Helm template
+        run: |
+          helm template latency-metrics ./helm \
+            --set vllm.hfTokenSecretName=hf-token \
+            -f helm/values-prod.yaml \
+            > /tmp/helm-rendered.yaml
+          test -s /tmp/helm-rendered.yaml
+
+      - name: Kustomize build
+        run: kubectl kustomize k8s/ > /tmp/k8s-rendered.yaml
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+
+      - name: Validate manifests (kubeconform — no cluster required)
+        run: |
+          kubeconform -summary -ignore-missing-schemas /tmp/k8s-rendered.yaml
+          kubeconform -summary -ignore-missing-schemas /tmp/helm-rendered.yaml
+
+      - name: Cluster dry-run (only when API server is available)
+        run: |
+          if kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then
+            echo "Kubernetes cluster detected — running server-side dry-run"
+            kubectl apply --dry-run=server -f /tmp/k8s-rendered.yaml
+            kubectl apply --dry-run=server -f /tmp/helm-rendered.yaml
+          else
+            echo "No Kubernetes cluster available — skipping kubectl apply"
+            echo "Offline validation (helm lint, template, kustomize, kubeconform) completed successfully"
+          fi
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [test, helm-k8s]
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    env:
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+      SARIF_FS: ${{ github.workspace }}/trivy-fs.sarif
+      SBOM_FS: ${{ github.workspace }}/sbom-filesystem.spdx.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Bandit SAST
+        run: |
+          pip install bandit
+          bandit -r proxy.py vllm_patch/ -ll -f json -o bandit-results.json
+          bandit -r proxy.py vllm_patch/ -ll
+          test -s bandit-results.json
+
+      - name: pip-audit dependency scan
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --progress-spinner off
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+          version: v0.71.0
+
+      - name: Trivy filesystem vulnerability scan (SARIF)
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --scanners vuln,secret \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 0 \
+            --format sarif \
+            --output "${SARIF_FS}"
+          test -s "${SARIF_FS}"
+          python -c "import json; json.load(open('${SARIF_FS}'))"
+
+      - name: Trivy license scan
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --scanners license \
+            --exit-code 0 \
+            --format table
+
+      - name: Trivy filesystem SBOM (SPDX)
+        run: |
+          trivy fs "${{ github.workspace }}" \
+            --format spdx-json \
+            --exit-code 0 \
+            --output "${SBOM_FS}"
+          test -s "${SBOM_FS}"
+
+      - name: Upload filesystem SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-filesystem
+          path: ${{ env.SBOM_FS }}
+          retention-days: 30
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+          retention-days: 14
+
+      - name: Upload Trivy filesystem SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: security
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+      image-digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: image
+        run: |
+          echo "tag=vllm-latency-proxy:ci-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "repository=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: ${{ steps.image.outputs.tag }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Push to GHCR
+        id: push
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          platforms: linux/amd64
+
+      - name: Install Cosign
+        if: steps.push.outcome == 'success'
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign container image (keyless)
+        if: steps.push.outcome == 'success'
+        run: |
+          cosign sign --yes "${{ steps.image.outputs.repository }}@${{ steps.push.outputs.digest }}"
+
+      - name: Save image for scan job
+        run: docker save ${{ steps.image.outputs.tag }} -o /tmp/image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+  docker-scan:
+    name: Docker Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    env:
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+      SARIF_IMAGE: ${{ github.workspace }}/trivy-image.sarif
+      SBOM_IMAGE: ${{ github.workspace }}/sbom-container.spdx.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load -i /tmp/image.tar
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+          version: v0.71.0
+
+      - name: Trivy container vulnerability scan (SARIF)
+        run: |
+          trivy image "${{ needs.docker-build.outputs.image-tag }}" \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --exit-code 0 \
+            --format sarif \
+            --output "${SARIF_IMAGE}"
+          test -s "${SARIF_IMAGE}"
+          python -c "import json; json.load(open('${SARIF_IMAGE}'))"
+
+      - name: Trivy container SBOM (SPDX)
+        run: |
+          trivy image "${{ needs.docker-build.outputs.image-tag }}" \
+            --format spdx-json \
+            --exit-code 0 \
+            --output "${SBOM_IMAGE}"
+          test -s "${SBOM_IMAGE}"
+
+      - name: Upload container SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-container
+          path: ${{ env.SBOM_IMAGE }}
+          retention-days: 90
+
+      - name: Upload Trivy container SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-container
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [docker-build, docker-scan]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Download container SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-container
+          path: dist/
+
+      - name: Package Helm chart
+        run: |
+          mkdir -p dist
+          helm package ./helm --destination dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tgz
+            dist/sbom-container.spdx.json
+
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test, helm-k8s, security, docker-build, docker-scan, release]
+    if: always()
+    steps:
+      - name: Report status
+        run: |
+          echo "lint=${{ needs.lint.result }}"
+          echo "test=${{ needs.test.result }}"
+          echo "helm-k8s=${{ needs.helm-k8s.result }}"
+          echo "security=${{ needs.security.result }}"
+          echo "docker-build=${{ needs.docker-build.result }}"
+          echo "docker-scan=${{ needs.docker-scan.result }}"
+          echo "release=${{ needs.release.result }}"
+
+          failed=0
+          for job in lint test helm-k8s security docker-build docker-scan; do
+            result=""
+            case "$job" in
+              lint) result="${{ needs.lint.result }}" ;;
+              test) result="${{ needs.test.result }}" ;;
+              helm-k8s) result="${{ needs.helm-k8s.result }}" ;;
+              security) result="${{ needs.security.result }}" ;;
+              docker-build) result="${{ needs.docker-build.result }}" ;;
+              docker-scan) result="${{ needs.docker-scan.result }}" ;;
+            esac
+            if [[ "$result" != "success" ]]; then
+              echo "Job $job failed with result=$result"
+              failed=1
+            fi
+          done
+
+          if [[ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]] && \
+             [[ "${{ needs.release.result }}" != "success" ]]; then
+            echo "Release job failed on tag push"
+            failed=1
+          fi
+
+          if [[ "$failed" -eq 1 ]]; then
+            echo "One or more required CI jobs failed."
+            exit 1
+          fi
+          echo "All required CI jobs passed."

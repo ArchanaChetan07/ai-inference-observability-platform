@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-latency-config
+  namespace: vllm
+  labels:
+    app.kubernetes.io/part-of: vllm-latency-metrics
+data:
+  VLLM_MODEL: "facebook/opt-1.3b"
+  VLLM_DTYPE: "float16"
+  VLLM_MAX_MODEL_LEN: "2048"
+  VLLM_GPU_MEMORY_UTILIZATION: "0.85"
+  VLLM_ATTENTION_BACKEND: "XFORMERS"
+  VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+  PROXY_STATS_WINDOW: "1000"
+  PROXY_LOG_LEVEL: "INFO"
+  PROXY_PORT: "8080"
+  VLLM_BASE_URL: "http://vllm:8000"
+  OTEL_ENABLED: "false"
+  OTEL_SERVICE_NAME: "vllm-latency-proxy"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"

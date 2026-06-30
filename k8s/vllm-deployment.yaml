@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: vllm
+  labels:
+    app: vllm
+    app.kubernetes.io/component: inference-server
+    app.kubernetes.io/part-of: vllm-latency-metrics
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+        app.kubernetes.io/component: inference-server
+    spec:
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.4.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            - name: VLLM_ATTENTION_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_ATTENTION_BACKEND
+            - name: VLLM_WORKER_MULTIPROC_METHOD
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_WORKER_MULTIPROC_METHOD
+            - name: VLLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_MODEL
+            - name: VLLM_DTYPE
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_DTYPE
+            - name: VLLM_MAX_MODEL_LEN
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_MAX_MODEL_LEN
+            - name: VLLM_GPU_MEMORY_UTILIZATION
+              valueFrom:
+                configMapKeyRef:
+                  name: vllm-latency-config
+                  key: VLLM_GPU_MEMORY_UTILIZATION
+          command:
+            - /bin/sh
+            - -c
+            - |
+              exec python3 -m vllm.entrypoints.openai.api_server \
+                --model "${VLLM_MODEL}" \
+                --dtype "${VLLM_DTYPE}" \
+                --max-model-len "${VLLM_MAX_MODEL_LEN}" \
+                --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION}" \
+                --disable-log-requests
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache

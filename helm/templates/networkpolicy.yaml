@@ -1,0 +1,36 @@
+{{- if and .Values.proxy.enabled .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-proxy
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: proxy
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.proxy.port }}
+  egress:
+    {{- if .Values.vllm.enabled }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.vllm.service.port }}
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "vllm-latency-metrics.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: vllm
+    {{- end }}
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

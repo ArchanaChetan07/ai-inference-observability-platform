@@ -1,0 +1,71 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+  labels:
+    app.kubernetes.io/part-of: vllm-latency-metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: vllm-latency-proxy
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 8000
+      to:
+        - podSelector:
+            matchLabels:
+              app: vllm
+    - ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vllm
+  namespace: vllm
+  labels:
+    app.kubernetes.io/part-of: vllm-latency-metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: vllm
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: vllm-latency-proxy
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

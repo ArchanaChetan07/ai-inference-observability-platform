@@ -1,0 +1,11 @@
+{{- if .Values.priorityClass.enabled }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-inference
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+value: {{ .Values.priorityClass.value }}
+globalDefault: false
+description: "Priority class for vLLM inference and latency proxy workloads"
+{{- end }}

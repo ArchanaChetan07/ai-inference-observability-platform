@@ -1,0 +1,30 @@
+# Development overlay — minimal resources, single replica
+
+vllm:
+  enabled: false
+
+proxy:
+  replicaCount: 1
+  logLevel: DEBUG
+  autoscaling:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+prometheus:
+  enabled: true
+  retention: 7d
+
+grafana:
+  enabled: true
+
+opentelemetry:
+  enabled: false
+
+networkPolicy:
+  enabled: false

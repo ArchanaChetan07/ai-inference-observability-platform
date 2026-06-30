@@ -1,0 +1,107 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    {{- if .Values.prometheus.alertmanager.enabled }}
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - {{ include "vllm-latency-metrics.fullname" . }}-alertmanager:{{ .Values.prometheus.alertmanager.service.port }}
+    {{- end }}
+    {{- if .Values.prometheus.alertRules.enabled }}
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    {{- end }}
+    scrape_configs:
+      {{- if .Values.proxy.enabled }}
+      - job_name: vllm-latency-proxy
+        static_configs:
+          - targets:
+              - {{ include "vllm-latency-metrics.fullname" . }}-proxy:{{ .Values.proxy.service.port }}
+        metrics_path: /metrics
+      {{- end }}
+      {{- range .Values.prometheus.extraScrapeTargets }}
+      - job_name: {{ .job_name }}
+        static_configs:
+          - targets:
+              {{- range .static_configs }}
+              {{- range .targets }}
+              - {{ . | quote }}
+              {{- end }}
+              {{- end }}
+        {{- if .metrics_path }}
+        metrics_path: {{ .metrics_path }}
+        {{- end }}
+        {{- if .scrape_interval }}
+        scrape_interval: {{ .scrape_interval }}
+        {{- end }}
+      {{- end }}
+  {{- if .Values.prometheus.alertRules.enabled }}
+  alerts.yml: |
+{{ .Files.Get "files/alerts.yml" | indent 4 }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "vllm-latency-metrics.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+          ports:
+            - containerPort: {{ .Values.prometheus.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-prometheus
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "vllm-latency-metrics.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+  ports:
+    - port: {{ .Values.prometheus.service.port }}
+      targetPort: {{ .Values.prometheus.service.port }}
+{{- end }}

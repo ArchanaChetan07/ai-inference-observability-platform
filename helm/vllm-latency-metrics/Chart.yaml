@@ -1,0 +1,17 @@
+apiVersion: v2
+name: vllm-latency-metrics
+description: >
+  Helm chart for the vLLM Latency Metrics Proxy (Project 1A).
+  Deploys the proxy alongside vLLM and wires up Prometheus/Grafana.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - vllm
+  - llm
+  - latency
+  - metrics
+  - ttft
+maintainers:
+  - name: Archana
+    email: archana@example.com

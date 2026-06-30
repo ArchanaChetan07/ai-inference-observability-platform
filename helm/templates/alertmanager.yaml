@@ -1,0 +1,71 @@
+{{- if and .Values.prometheus.enabled .Values.prometheus.alertmanager.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-alertmanager
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: default
+      group_by: [alertname, severity]
+    receivers:
+      - name: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-alertmanager
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "vllm-latency-metrics.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alertmanager
+  template:
+    metadata:
+      labels:
+        {{- include "vllm-latency-metrics.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: {{ .Values.prometheus.alertmanager.image }}
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+          ports:
+            - containerPort: {{ .Values.prometheus.alertmanager.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vllm-latency-metrics.fullname" . }}-alertmanager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-alertmanager
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "vllm-latency-metrics.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+  ports:
+    - port: {{ .Values.prometheus.alertmanager.service.port }}
+      targetPort: {{ .Values.prometheus.alertmanager.service.port }}
+{{- end }}

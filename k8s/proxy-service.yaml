@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-latency-proxy
+  namespace: vllm
+  labels:
+    app: vllm-latency-proxy
+    app.kubernetes.io/component: metrics-proxy
+spec:
+  type: LoadBalancer
+  selector:
+    app: vllm-latency-proxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vllm-latency-metrics.fullname" . }}-config
+  labels:
+    {{- include "vllm-latency-metrics.labels" . | nindent 4 }}
+data:
+  VLLM_MODEL: {{ .Values.vllm.model | quote }}
+  VLLM_DTYPE: {{ .Values.vllm.dtype | quote }}
+  VLLM_MAX_MODEL_LEN: {{ .Values.vllm.maxModelLen | quote }}
+  VLLM_GPU_MEMORY_UTILIZATION: {{ .Values.vllm.gpuMemoryUtilization | quote }}
+  VLLM_ATTENTION_BACKEND: {{ .Values.vllm.attentionBackend | quote }}
+  VLLM_WORKER_MULTIPROC_METHOD: spawn
+  PROXY_STATS_WINDOW: {{ .Values.proxy.statsWindow | quote }}
+  PROXY_LOG_LEVEL: {{ .Values.proxy.logLevel | quote }}
+  PROXY_PORT: {{ .Values.proxy.port | quote }}
+  VLLM_BASE_URL: http://{{ include "vllm-latency-metrics.fullname" . }}-vllm:{{ .Values.vllm.service.port }}
+  OTEL_ENABLED: {{ .Values.opentelemetry.enabled | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.opentelemetry.serviceName | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.opentelemetry.exporter.endpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.opentelemetry.exporter.protocol | quote }}

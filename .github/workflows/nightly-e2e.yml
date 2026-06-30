@@ -1,0 +1,35 @@
+name: Nightly E2E
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: E2E (live vLLM)
+    runs-on: ubuntu-latest
+    if: vars.E2E_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run E2E tests
+        env:
+          VLLM_E2E_URL: ${{ vars.VLLM_E2E_URL }}
+        run: pytest tests/ -m e2e -v --tb=short
+
+  skip-notice:
+    name: E2E Skipped
+    runs-on: ubuntu-latest
+    if: vars.E2E_ENABLED != 'true'
+    steps:
+      - run: |
+          echo "E2E nightly skipped — set repository variable E2E_ENABLED=true and VLLM_E2E_URL to enable."
