@@ -64,7 +64,7 @@ def main() -> None:
                 fail += 1
             print(f"round {r}/{rounds} req {i}/{len(PROMPTS)} ok={ok} fail={fail}", flush=True)
     elapsed = time.time() - t0
-    print(f"DONE ok={ok} fail={fail} elapsed={elapsed:.1f}s rps={ok/elapsed:.2f}")
+    print(f"DONE ok={ok} fail={fail} elapsed={elapsed:.1f}s rps={ok / elapsed:.2f}")
 
 
 if __name__ == "__main__":
