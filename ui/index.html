@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inference Trace — vLLM Latency Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-raised: #171c27;
+    --border: #232938;
+    --text: #e7e9ee;
+    --text-muted: #7c8494;
+    --text-dim: #4d5567;
+    --amber: #ffb454;
+    --amber-dim: #6b5730;
+    --cyan: #4fd8e0;
+    --cyan-dim: #2d5a5c;
+    --red: #e5484d;
+    --green: #3fd68c;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    background-image:
+      radial-gradient(circle at 15% -10%, rgba(255,180,84,0.06), transparent 40%),
+      radial-gradient(circle at 85% 0%, rgba(79,216,224,0.05), transparent 40%);
+  }
+
+  /* ---------------- Header ribbon ---------------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(18, 22, 31, 0.85);
+    backdrop-filter: blur(6px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-size: 14px;
+  }
+
+  .brand .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    box-shadow: 0 0 0 0 transparent;
+    transition: background 0.3s;
+  }
+  .brand .dot.ok { background: var(--green); box-shadow: 0 0 8px 1px rgba(63,214,140,0.6); }
+  .brand .dot.bad { background: var(--red); box-shadow: 0 0 8px 1px rgba(229,72,77,0.6); }
+
+  .brand .status-text {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 12px;
+  }
+
+  .ribbon-stats {
+    display: flex;
+    gap: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .ribbon-stats .stat { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+  .ribbon-stats .stat .label { font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+  .ribbon-stats .stat .value { color: var(--text); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .ribbon-stats .stat .value.amber { color: var(--amber); }
+  .ribbon-stats .stat .value.cyan { color: var(--cyan); }
+
+  /* ---------------- Settings row ---------------- */
+  .settings {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    font-family: var(--mono);
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .settings label { color: var(--text-muted); }
+  .settings input {
+    background: var(--panel-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    min-width: 180px;
+  }
+  .settings input:focus { border-color: var(--cyan); }
+  .settings button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .settings button.ghost:hover { border-color: var(--text-dim); color: var(--text); }
+  .settings .legend {
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    color: var(--text-muted);
+    font-size: 11px;
+    align-items: center;
+  }
+  .legend .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .legend .swatch.amber { background: var(--amber); }
+  .legend .swatch.cyan { background: var(--cyan); }
+
+  /* ---------------- Chat pane ---------------- */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 380px;
+    line-height: 1.6;
+  }
+  .empty-state .big { font-family: var(--mono); color: var(--text-muted); font-size: 13px; display:block; margin-bottom: 8px;}
+
+  .msg { display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+  .msg.user { align-items: flex-end; }
+  .msg.assistant { align-items: flex-start; }
+
+  .bubble {
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    line-height: 1.55;
+    font-size: 14.5px;
+    max-width: 640px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .msg.user .bubble {
+    background: var(--panel-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-bottom-right-radius: 3px;
+  }
+  .msg.assistant .bubble {
+    background: transparent;
+    border: 1px solid transparent;
+    padding-left: 0;
+    color: var(--text);
+    border-bottom-left-radius: 3px;
+  }
+  .msg.assistant .bubble.error {
+    background: rgba(229,72,77,0.08);
+    border: 1px solid rgba(229,72,77,0.35);
+    color: #ffb9bb;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+  }
+  .msg.assistant .bubble .cursor {
+    display: inline-block;
+    width: 7px;
+    height: 15px;
+    background: var(--cyan);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------------- Trace strip (signature element) ---------------- */
+  .trace-wrap {
+    width: 100%;
+    max-width: 640px;
+  }
+  .trace {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 34px;
+    padding: 4px 0;
+  }
+  .trace .bar {
+    width: 3px;
+    min-width: 3px;
+    border-radius: 1.5px 1.5px 0 0;
+    background: var(--cyan);
+    height: 2px;
+    transition: height 0.15s ease-out;
+    flex-shrink: 0;
+  }
+  .trace .bar.ttft {
+    width: 6px;
+    background: var(--amber);
+  }
+  .trace .bar.spike {
+    background: var(--red);
+    box-shadow: 0 0 6px 0 rgba(229,72,77,0.7);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .trace .bar { transition: none; }
+  }
+
+  .badge-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .badge-row .b { display: flex; gap: 5px; align-items: baseline; }
+  .badge-row .b .k { color: var(--text-muted); }
+  .badge-row .b .v { color: var(--text); font-variant-numeric: tabular-nums; }
+  .badge-row .b .v.amber { color: var(--amber); }
+  .badge-row .b .v.cyan { color: var(--cyan); }
+  .badge-row .b .v.est::after { content: ' ~'; color: var(--text-muted); }
+
+  /* ---------------- Composer ---------------- */
+  footer {
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 14px 22px 18px;
+  }
+  .composer {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    background: var(--panel-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    max-height: 160px;
+    outline: none;
+  }
+  .composer textarea:focus { border-color: var(--cyan); }
+  .composer button.send {
+    background: var(--amber);
+    color: #1a1206;
+    border: none;
+    border-radius: var(--radius);
+    padding: 12px 20px;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .composer button.send:hover:not(:disabled) { filter: brightness(1.1); }
+  .composer button.send:disabled { background: var(--panel-raised); color: var(--text-dim); cursor: not-allowed; }
+  .composer button.send:focus-visible,
+  .composer textarea:focus-visible,
+  .settings input:focus-visible,
+  .settings button:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  .hint { max-width: 860px; margin: 6px auto 0; font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--panel-raised); border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="dot" id="statusDot"></span>
+    <span>INFERENCE TRACE</span>
+    <span class="status-text" id="statusText">connecting…</span>
+  </div>
+  <div class="ribbon-stats" id="ribbonStats">
+    <div class="stat"><span class="label">proxy p50 ttft</span><span class="value amber" id="statP50">—</span></div>
+    <div class="stat"><span class="label">proxy p99 ttft</span><span class="value amber" id="statP99">—</span></div>
+    <div class="stat"><span class="label">mean tbt</span><span class="value cyan" id="statTbt">—</span></div>
+    <div class="stat"><span class="label">window n</span><span class="value" id="statCount">—</span></div>
+  </div>
+</header>
+
+<div class="settings">
+  <label for="baseUrl">proxy url</label>
+  <input id="baseUrl" type="text" value="http://localhost:8080" spellcheck="false" />
+  <label for="modelName">model</label>
+  <input id="modelName" type="text" value="mock-model" spellcheck="false" />
+  <button class="ghost" id="reconnectBtn">refresh status</button>
+  <button class="ghost" id="clearBtn">clear chat</button>
+  <div class="legend">
+    <span><span class="swatch amber"></span>TTFT</span>
+    <span><span class="swatch cyan"></span>inter-token</span>
+  </div>
+</div>
+
+<main id="chatPane">
+  <div class="empty-state" id="emptyState">
+    <span class="big">// waiting for input</span>
+    Send a message. Every reply streams back with its actual per-token timing —
+    the amber bar is time-to-first-token, the cyan bars are the gaps between
+    each token after that.
+  </div>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="Ask something…"></textarea>
+    <button class="send" id="sendBtn">Send</button>
+  </div>
+  <div class="hint">Enter to send · Shift+Enter for newline · numbers marked with ~ are client-side estimates (proxy didn't report them)</div>
+</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const chatPane = $('chatPane');
+  const emptyState = $('emptyState');
+  const input = $('input');
+  const sendBtn = $('sendBtn');
+  const baseUrlInput = $('baseUrl');
+  const modelInput = $('modelName');
+  const statusDot = $('statusDot');
+  const statusText = $('statusText');
+  const reconnectBtn = $('reconnectBtn');
+  const clearBtn = $('clearBtn');
+
+  let history = [];
+  let sending = false;
+  let activeController = null;
+
+  function baseUrl() { return baseUrlInput.value.replace(/\/+$/, ''); }
+  function model() { return modelInput.value.trim() || 'unknown'; }
+
+  function fmtMs(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return '—';
+    return (v >= 1000 ? (v / 1000).toFixed(2) + 's' : Math.round(v) + 'ms');
+  }
+
+  // ---------------- Health / rolling stats ----------------
+  async function checkHealth() {
+    try {
+      const res = await fetch(baseUrl() + '/health', { cache: 'no-store' });
+      const data = await res.json();
+      const ok = data.proxy === 'ok' && data.upstream === 'ok';
+      statusDot.className = 'dot ' + (ok ? 'ok' : 'bad');
+      statusText.textContent = ok
+        ? 'proxy ok · upstream ok'
+        : ('proxy ok · upstream ' + (data.upstream || 'unreachable'));
+    } catch (e) {
+      statusDot.className = 'dot bad';
+      statusText.textContent = 'unreachable — check proxy url / CORS';
+    }
+  }
+
+  async function refreshStats() {
+    try {
+      const res = await fetch(baseUrl() + '/latency/stats', { cache: 'no-store' });
+      const data = await res.json();
+      if (!data.count) {
+        $('statP50').textContent = '—';
+        $('statP99').textContent = '—';
+        $('statTbt').textContent = '—';
+        $('statCount').textContent = '0';
+        return;
+      }
+      $('statP50').textContent = fmtMs(data.ttft_ms.p50);
+      $('statP99').textContent = fmtMs(data.ttft_ms.p99);
+      $('statTbt').textContent = data.mean_tbt_ms.mean != null ? fmtMs(data.mean_tbt_ms.mean) : '—';
+      $('statCount').textContent = data.count;
+    } catch (e) { /* leave last-known values */ }
+  }
+
+  reconnectBtn.addEventListener('click', () => { checkHealth(); refreshStats(); });
+  clearBtn.addEventListener('click', () => {
+    if (activeController) activeController.abort();
+    history = [];
+    sending = false;
+    sendBtn.disabled = false;
+    chatPane.innerHTML = '';
+    chatPane.appendChild(emptyState);
+  });
+
+  // ---------------- Rendering helpers ----------------
+  function scrollToBottom() { chatPane.scrollTop = chatPane.scrollHeight; }
+
+  function addUserMessage(text) {
+    if (emptyState.parentNode) emptyState.remove();
+    const el = document.createElement('div');
+    el.className = 'msg user';
+    el.innerHTML = '<div class="bubble"></div>';
+    el.querySelector('.bubble').textContent = text;
+    chatPane.appendChild(el);
+    scrollToBottom();
+  }
+
+  function addAssistantSkeleton() {
+    const el = document.createElement('div');
+    el.className = 'msg assistant';
+    el.innerHTML =
+      '<div class="bubble"><span class="text"></span><span class="cursor"></span></div>' +
+      '<div class="trace-wrap"><div class="trace"></div></div>' +
+      '<div class="badge-row"></div>';
+    chatPane.appendChild(el);
+    scrollToBottom();
+    return el;
+  }
+
+  function appendBar(traceEl, ms, kind, capMs, medianRef) {
+    const bar = document.createElement('div');
+    bar.className = 'bar' + (kind === 'ttft' ? ' ttft' : '');
+    const isSpike = kind !== 'ttft' && ms > Math.max(80, medianRef.value * 2.2);
+    if (isSpike) bar.classList.add('spike');
+    traceEl.appendChild(bar);
+    const pct = Math.max(4, Math.min(100, (ms / capMs) * 100));
+    requestAnimationFrame(() => { bar.style.height = pct + '%'; });
+    if (kind !== 'ttft') {
+      medianRef.samples.push(ms);
+      medianRef.samples.sort((a, b) => a - b);
+      medianRef.value = medianRef.samples[Math.floor(medianRef.samples.length / 2)];
+    }
+  }
+
+  function renderBadges(rowEl, stats, fallback) {
+    const get = (k, fbKey) => {
+      if (stats[k] !== undefined) return { v: parseFloat(stats[k]), est: false };
+      // fallback[fbKey] can be explicitly null (e.g. mean TBT undefined for a
+      // single-token reply) — treat that the same as "no value", not as an
+      // estimate of null.
+      if (fallback && fallback[fbKey] != null) return { v: fallback[fbKey], est: true };
+      return null;
+    };
+    const ttft = get('x-vllm-ttft-ms', 'ttft');
+    const tbt = get('x-vllm-mean-tbt-ms', 'tbt');
+    const p99 = get('x-vllm-p99-tbt-ms', null);
+    const tok = get('x-vllm-tokens-generated', 'tokens');
+    const e2e = get('x-vllm-e2e-latency-ms', 'e2e');
+
+    const parts = [];
+    if (ttft) parts.push(badgeHtml('ttft', fmtMs(ttft.v), 'amber', ttft.est));
+    if (tbt) parts.push(badgeHtml('tbt', fmtMs(tbt.v), 'cyan', tbt.est));
+    if (p99) parts.push(badgeHtml('p99 tbt', fmtMs(p99.v), 'cyan', p99.est));
+    if (tok) parts.push(badgeHtml('tokens', String(Math.round(tok.v)), '', tok.est));
+    if (e2e) parts.push(badgeHtml('e2e', fmtMs(e2e.v), '', e2e.est));
+    rowEl.innerHTML = parts.join('');
+  }
+
+  function badgeHtml(label, value, colorClass, est) {
+    return '<div class="b"><span class="k">' + label + '</span><span class="v ' +
+      colorClass + (est ? ' est' : '') + '">' + value + '</span></div>';
+  }
+
+  // ---------------- Core send/stream logic ----------------
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || sending) return;
+    sending = true;
+    sendBtn.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+
+    addUserMessage(text);
+    history.push({ role: 'user', content: text });
+
+    const el = addAssistantSkeleton();
+    const textEl = el.querySelector('.text');
+    const cursorEl = el.querySelector('.cursor');
+    const traceEl = el.querySelector('.trace');
+    const badgeRow = el.querySelector('.badge-row');
+    const bubbleEl = el.querySelector('.bubble');
+
+    const t0 = performance.now();
+    let firstTokenAt = null;
+    let lastTokenAt = null;
+    let tokenCount = 0;
+    let assistantText = '';
+    let rawErrorDetail = null;
+    const medianRef = { value: 40, samples: [] };
+    const stats = {};
+    const controller = new AbortController();
+    activeController = controller;
+
+    try {
+      let res;
+      try {
+        res = await fetch(baseUrl() + '/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model(), stream: true, messages: history }),
+          signal: controller.signal,
+        });
+      } catch (networkErr) {
+        if (networkErr.name === 'AbortError') throw networkErr;
+        throw Object.assign(new Error('network unreachable'), { kind: 'network' });
+      }
+
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const raw = await res.text();
+          try {
+            const asJson = JSON.parse(raw);
+            detail = (asJson.error && (asJson.error.message || asJson.error)) || asJson.detail || raw;
+          } catch (e) { detail = raw; }
+        } catch (e) { /* body unreadable, proceed without detail */ }
+        throw Object.assign(new Error('http error'), {
+          kind: 'http', status: res.status, detail: String(detail).slice(0, 300),
+        });
+      }
+      if (!res.body) {
+        throw Object.assign(new Error('no body'), {
+          kind: 'http', status: res.status, detail: 'Response had no readable body.',
+        });
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      const handleLine = (line) => {
+        if (!line) return;
+        if (line.startsWith(': x-vllm-')) {
+          const body = line.slice(2);
+          const eq = body.indexOf('=');
+          if (eq > -1) stats[body.slice(0, eq)] = body.slice(eq + 1);
+          return;
+        }
+        if (line === 'data: [DONE]') return;
+        if (line.startsWith('data: ')) {
+          let chunk;
+          try { chunk = JSON.parse(line.slice(6)); } catch (e) { return; }
+          const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+          const content = delta && delta.content;
+          if (content) {
+            const now = performance.now();
+            if (firstTokenAt === null) {
+              firstTokenAt = now;
+              appendBar(traceEl, now - t0, 'ttft', 600, medianRef);
+            } else {
+              appendBar(traceEl, now - lastTokenAt, 'tbt', 200, medianRef);
+            }
+            lastTokenAt = now;
+            tokenCount++;
+            assistantText += content;
+            textEl.textContent = assistantText;
+            scrollToBottom();
+          }
+          return;
+        }
+        // Some upstreams (and proxies in front of them) return a rejected
+        // request as a raw, non-SSE JSON error body on a 200 response —
+        // e.g. an invalid model name. It won't match any prefix above, so
+        // catch it here rather than silently dropping it.
+        const trimmed = line.trim();
+        if (trimmed.startsWith('{')) {
+          try {
+            const maybeErr = JSON.parse(trimmed);
+            if (maybeErr && maybeErr.error) {
+              rawErrorDetail = maybeErr.error.message || String(maybeErr.error);
+            }
+          } catch (e) { /* not JSON — genuinely not something we understand */ }
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          handleLine(buf.slice(0, idx));
+          buf = buf.slice(idx + 1);
+        }
+      }
+      if (buf) handleLine(buf);
+
+      if (controller.signal.aborted) return; // chat was cleared mid-stream; discard this reply
+
+      if (tokenCount === 0 && stats['x-vllm-ttft-ms'] === undefined) {
+        // The connection returned HTTP 200 but produced no content and no
+        // proxy latency comments — almost always an upstream rejection
+        // (bad model name, invalid request) that the proxy forwarded as a
+        // raw error body instead of a proper error status. Surface it
+        // rather than rendering an empty "successful" reply.
+        throw Object.assign(new Error('empty stream'), {
+          kind: 'http',
+          status: res.status,
+          detail: rawErrorDetail ||
+            'The response contained no tokens. Check the model name matches what the server is actually serving.',
+        });
+      }
+
+      cursorEl.remove();
+      const e2e = performance.now() - t0;
+      const fallback = {
+        ttft: firstTokenAt !== null ? firstTokenAt - t0 : e2e,
+        tbt: tokenCount > 1 ? (lastTokenAt - firstTokenAt) / (tokenCount - 1) : null,
+        tokens: tokenCount,
+        e2e: e2e,
+      };
+      renderBadges(badgeRow, stats, fallback);
+      history.push({ role: 'assistant', content: assistantText });
+    } catch (err) {
+      if (err.name === 'AbortError') return; // cancelled via Clear Chat — no error UI needed
+      cursorEl.remove();
+      textEl.remove();
+      bubbleEl.classList.add('error');
+      if (err.kind === 'http') {
+        bubbleEl.textContent = 'Upstream returned HTTP ' + err.status +
+          (err.detail ? ': ' + err.detail : '') +
+          '. The proxy is reachable — check the model name and request body.';
+      } else if (err.kind === 'network') {
+        bubbleEl.textContent = "Couldn't reach " + baseUrl() +
+          ". Confirm the proxy is running, the port is correct, and CORS isn't blocked, then click refresh status.";
+      } else {
+        bubbleEl.textContent = 'Something went wrong while streaming the response: ' + err.message;
+      }
+      traceEl.parentElement.remove();
+    } finally {
+      if (activeController === controller) activeController = null;
+      sending = false;
+      sendBtn.disabled = false;
+      checkHealth();
+      refreshStats();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(160, input.scrollHeight) + 'px';
+  });
+  baseUrlInput.addEventListener('change', () => { checkHealth(); refreshStats(); });
+
+  checkHealth();
+  refreshStats();
+  setInterval(() => { checkHealth(); refreshStats(); }, 15000);
+})();
+</script>
+</body>
+</html>
