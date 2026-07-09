@@ -112,6 +112,31 @@ flowchart LR
 
 **Request flow (streaming):**
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant P as Proxy
+    participant V as vLLM
+
+    C->>P: POST /v1/chat/completions (stream: true)
+    P->>V: forward request
+    Note over P: t0 = request start
+    V-->>P: first token chunk
+    Note over P: TTFT = now − t0
+    P-->>C: data: {"delta": {"content": "..."}}
+    loop per token
+        V-->>P: next token chunk
+        P-->>C: forward immediately (no added latency)
+    end
+    V-->>P: data: [DONE]
+    P-->>C: data: [DONE]
+    Note over P: finalize snapshot
+    P-->>C: : x-vllm-ttft-ms=...
+    P-->>C: : x-vllm-mean-tbt-ms=...
+    P-->>C: : x-vllm-p99-tbt-ms=...
+    P->>P: update Prometheus histograms
+```
+
 1. Client sends `POST /v1/chat/completions` to the proxy
 2. Proxy forwards transparently to vLLM and tracks token arrival timestamps
 3. Client receives SSE chunks in real time — no added latency on the hot path
@@ -255,11 +280,14 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 | 5 | vLLM `:8000` | 1.03 | 813 ms | — |
 | 5 | Proxy `:8082` | 1.02 | 844 ms | +31 ms P99 |
 
+![Bar charts comparing vLLM direct vs proxy: TTFT P99 in milliseconds and throughput in requests/sec, at concurrency 1 and 5, showing near-identical values between direct and proxied requests](docs/images/benchmark-overhead.png)
+
 **Conclusion:** GPU inference and vLLM batch scheduling dominate latency — not proxy overhead.
 
 ```bash
 python benchmarks/run_benchmark.py --base-url http://localhost:8082 --concurrency 1 5
 python benchmarks/perf_review.py
+python scripts/generate_benchmark_chart.py   # regenerate the chart above from results/
 ```
 
 ---
