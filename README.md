@@ -35,6 +35,16 @@
 | **Test coverage** | 51 automated tests · no GPU required for CI suite |
 | **Stack** | Docker Compose · Kubernetes · Helm · Prometheus · Grafana · OpenTelemetry |
 
+### Measured results (NVIDIA T1000 8 GB · 2026-07-09)
+
+| Metric | Value | Source |
+|--------|------:|--------|
+| Successful proxy requests | **468** | Prometheus `vllm_proxy_requests_total{status="200"}` |
+| TTFT p50 (live stream) | **456 ms** | SSE comment on sample request |
+| TTFT P99 @ c=5 (benchmark) | **891 ms** proxy · **766 ms** direct | [`benchmark_20260709_133535.json`](benchmarks/results/benchmark_20260709_133535.json) |
+| Proxy overhead @ c=5 | **−12% RPS · +125 ms P99** | Direct vs proxied benchmark |
+| Tests | **51 passing** | `pytest tests/` (no GPU) |
+
 ---
 
 ## Latency model
@@ -359,7 +369,7 @@ GPU inference and vLLM batch scheduling dominate latency — proxy overhead is s
 <tr>
 <td align="center"><sub>Overhead · RPS + TTFT P99</sub></td>
 <td align="center"><sub>Percentile spread @ c=1</sub></td>
-<td align="center"><sub>TTFT distribution (n=50)</sub></td>
+<td align="center"><sub>TTFT distribution (n=30)</sub></td>
 </tr>
 </table>
 
