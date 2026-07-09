@@ -273,7 +273,7 @@ curl -N http://localhost:8082/v1/chat/completions \
 | vLLM (raw) | http://localhost:8000 | Upstream inference server |
 | Prometheus | http://localhost:9090 | Metrics collection |
 | Alertmanager | http://localhost:9093 | Alert routing |
-| Grafana | http://localhost:3000 | Dashboards (`admin` / `admin`) |
+| Grafana | http://127.0.0.1:3000 | Dashboards (`admin` / `admin`) — use `127.0.0.1`, not `localhost` |
 
 ---
 
@@ -309,11 +309,11 @@ Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml) · Alertmanager: [
 
 ### Grafana dashboard (live hardware)
 
-Captured after **437 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
+Captured after **468 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
 
 ![Grafana dashboard showing TTFT p50/p95/p99, TBT p50/p99, requests/sec, active requests, and E2E latency p99 over a 30-minute window with sustained real traffic](docs/images/grafana-latency-dashboard.png)
 
-Open locally: `http://127.0.0.1:3000/d/vllm-latency-1a` (`admin` / `admin`)
+Open locally: `http://127.0.0.1:3000/d/vllm-latency-1a/vllm-latency-metrics-e28094-project-1a` (`admin` / `admin`)
 
 Generate demo traffic for recruiters / reviewers:
 

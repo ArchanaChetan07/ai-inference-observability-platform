@@ -104,7 +104,6 @@ def chart_percentiles(direct: list[dict], proxy: list[dict]) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.8), dpi=150, sharey=True)
     fig.patch.set_facecolor("white")
 
-    percentiles = ("p50", "p95", "p99")
     labels = ("P50", "P95", "P99")
     keys = ("ttft_p50", "ttft_p95", "ttft_p99")
 
@@ -137,7 +136,7 @@ def chart_distribution(ttft_ms: list[float]) -> None:
     ax.axvline(np.percentile(ttft_ms, 99), color="#e5484d", linestyle="--", linewidth=1.2, label=f"P99 {np.percentile(ttft_ms, 99):.0f} ms")
     ax.set_xlabel("TTFT (ms)")
     ax.set_ylabel("Requests")
-    ax.set_title("Proxy TTFT distribution · concurrency 1 · n=50", fontsize=10, fontweight="bold")
+    ax.set_title(f"Proxy TTFT distribution · concurrency 1 · n={len(ttft_ms)}", fontsize=10, fontweight="bold")
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(fontsize=8, frameon=False)
 
