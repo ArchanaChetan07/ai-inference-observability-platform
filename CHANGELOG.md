@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0] — 2026-07-09
+
+### Added
+- `ui/index.html` — zero-build, zero-dependency chat client that streams
+  replies and renders each one's actual per-token timing (TTFT/TBT) as a
+  trace strip, sourced directly from the proxy's SSE latency comments.
+
+### Fixed
+- **Streaming requests always returned HTTP 200, even when vLLM rejected
+  the request outright** (bad model name, invalid body). The proxy forwarded
+  the raw error JSON as an opaque, non-SSE line with no closing latency
+  comments — no client could distinguish a rejected request from an empty
+  successful one without inspecting body content. `_handle_streaming` now
+  checks the upstream status before committing to a streaming response and
+  returns the real status code and error body when upstream fails
+  (`tests/test_edge_cases.py::test_streaming_request_propagates_upstream_error_status`).
+
 ## [1.1.0] — 2026-06-29
 
 ### Added

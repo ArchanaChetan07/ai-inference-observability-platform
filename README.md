@@ -15,7 +15,7 @@
 [![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](monitoring/)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP-000000?logo=opentelemetry&logoColor=white)](docs/opentelemetry.md)
 [![CI/CD](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml/badge.svg)](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml)
-[![Tests](https://img.shields.io/badge/Tests-48_passing-success)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-51_passing-success)](tests/)
 
 [Quick Start](#quick-start) · [Architecture](#architecture) · [Observability](#observability) · [Deployment](#production-deployment) · [Documentation](#documentation)
 
@@ -33,9 +33,17 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 |---|---|
 | **Deploy time** | ~2 minutes (Docker Compose, includes model download) |
 | **Proxy overhead** | ≤ 4% RPS · ≤ 31 ms TTFT P99 @ concurrency 5 |
-| **Test coverage** | 48 automated tests (unit · integration · regression · concurrent) |
+| **Test coverage** | 51 automated tests (unit · integration · regression · concurrent) |
 | **Production stack** | Kubernetes · Helm · Prometheus · Grafana · Alertmanager · OpenTelemetry |
-| **Production readiness** | [100 / 100](reports/production-readiness-100.md) |
+| **Live demo** | Zero-build [chat UI](ui/) with per-token latency visualization (`ui/index.html`) |
+
+---
+
+## See it working
+
+![Chat UI showing a streamed reply with a per-token latency trace: amber TTFT bar, cyan inter-token bars, and a badge row reading ttft 102ms · tbt 40ms · p99 tbt 58ms · tokens 25 · e2e 1.13s](ui/screenshots/chat-latency-trace.png)
+
+Every reply streams in with its **actual measured timing** rendered as a trace strip — amber for TTFT, cyan for the gap between each subsequent token, red for outliers. No build step: open [`ui/index.html`](ui/) directly against a running proxy. See [`ui/README.md`](ui/README.md) for details.
 
 ---
 
@@ -112,7 +120,7 @@ flowchart LR
 
 | Component | Role |
 |-----------|------|
-| [`proxy.py`](proxy.py) | Production FastAPI sidecar (v1.2) |
+| [`proxy.py`](proxy.py) | Production FastAPI sidecar (v1.3) |
 | [`vllm_patch/latency_utils.py`](vllm_patch/latency_utils.py) | O(1) per-token tracker with reservoir P99 |
 | [`vllm_patch/telemetry.py`](vllm_patch/telemetry.py) | Optional OpenTelemetry OTLP export |
 | [`docker/`](docker/) | Multi-stage Dockerfile · Compose · Alertmanager · OTel overlay |
@@ -323,7 +331,7 @@ Every push to `main` triggers [GitHub Actions](.github/workflows/main.yml):
 
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/ -m "unit or integration or regression" -v   # 48 tests, no GPU
+pytest tests/ -m "unit or integration or regression" -v   # 51 tests, no GPU
 VLLM_E2E_URL=http://localhost:8082 pytest tests/ -m e2e   # live stack required
 ```
 
@@ -334,6 +342,18 @@ VLLM_E2E_URL=http://localhost:8082 pytest tests/ -m e2e   # live stack required
 | Concurrent | `integration` | 20 parallel requests, gauge leak |
 | E2E | `e2e` | Live vLLM TTFT + SSE comments |
 | Telemetry | `unit` | OpenTelemetry noop path |
+
+---
+
+## Known limitations
+
+No proxy is free of trade-offs — these are the ones worth knowing before you rely on it:
+
+- **TTFT includes the proxy hop.** Measurement happens at the proxy's HTTP boundary, not inside vLLM's scheduler, so TTFT is "authoritative from the client's perspective," not a substitute for GPU-side instrumentation. The optional [`vllm_patch/`](vllm_patch/) closes that gap if you need engine-internal timestamps.
+- **Non-streaming requests can't measure per-token TBT** — there's only one response to time, so `mean_tbt_ms`/`p99_tbt_ms` are `null` for `stream: false` calls. TTFT and E2E are still measured.
+- **Single upstream per proxy instance.** Multi-model routing exists as a reference nginx config ([`docker-compose.multi.yml`](docker/docker-compose.multi.yml)), not as logic inside `proxy.py` itself — see the roadmap.
+- **No built-in auth or rate limiting.** This is a latency-instrumentation layer, not an API gateway; put one in front of it if you're exposing it beyond a trusted network.
+- **SSE latency lines are comments, not HTTP trailers** — a fundamental HTTP/1.1 constraint (trailers aren't reliably supported across clients/proxies for SSE), not a design shortcut. Clients need to parse `: x-vllm-*` lines after `[DONE]`, which is what [`ui/index.html`](ui/) does.
 
 ---
 
@@ -358,12 +378,13 @@ ai-inference-observability-platform/
 ├── proxy.py                      # FastAPI latency proxy
 ├── requirements.lock             # Pinned deps for reproducible Docker builds
 ├── vllm_patch/                   # Latency utils + OpenTelemetry + upstream patch
+├── ui/                           # Zero-build live latency chat UI (single HTML file)
 ├── docker/                       # Dockerfile, Compose, Alertmanager, OTel overlay
 ├── k8s/                          # Kubernetes manifests (Kustomize)
 ├── helm/                         # Helm chart (prod · dev · docker-desktop values)
 ├── monitoring/                   # Grafana dashboard, Prometheus alert rules
 ├── benchmarks/                   # E2E + micro-benchmark harness
-├── tests/                        # Pytest suite (48 tests)
+├── tests/                        # Pytest suite (51 tests)
 ├── .github/workflows/main.yml    # CI/CD pipeline
 ├── pyproject.toml                # Ruff, mypy, pytest configuration
 └── docs/                         # Deployment, architecture, runbooks
@@ -406,10 +427,12 @@ PR template: [`docs/PR_DESCRIPTION.md`](docs/PR_DESCRIPTION.md) · Annotated dif
 - [x] GitHub Actions CI/CD with security scanning
 - [x] Alertmanager + Prometheus alert rules
 - [x] NetworkPolicy + Pod Security Standards
+- [x] k6 load-test harness + Python benchmark suite with published results
+- [x] Live latency chat UI
 - [ ] Upstream merge into vLLM core
 - [ ] HPA on custom TTFT Prometheus metrics
 - [ ] DCGM GPU panels in Grafana
-- [ ] k6 / Locust load-test harness
+- [ ] Multi-model routing logic inside the proxy (currently reference nginx config only)
 
 ---
 
