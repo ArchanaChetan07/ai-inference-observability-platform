@@ -236,7 +236,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="vLLM Latency Metrics Proxy",
     description="Transparent proxy that measures and surfaces TTFT/TBT metrics for vLLM",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
 )
 
@@ -406,53 +406,75 @@ async def _handle_streaming(
     model: str,
     request_start: float,
     span: object,
-) -> StreamingResponse:
+):
+    upstream_ctx = client.stream("POST", path, headers=headers, content=body_bytes)
+    upstream = await upstream_ctx.__aenter__()
+    status_code = upstream.status_code
+
+    if status_code >= 400:
+        # Upstream rejected the request before producing any stream (bad
+        # model name, malformed body, etc). Surface the real status and
+        # body instead of returning 200 with an opaque, non-SSE error line
+        # that no client — including this project's own UI — could
+        # reliably distinguish from a successful empty reply.
+        try:
+            error_body = await upstream.aread()
+        finally:
+            await upstream_ctx.__aexit__(None, None, None)
+        REQUEST_COUNTER.labels(endpoint=path, status=str(status_code)).inc()
+        ACTIVE_REQUESTS.dec()
+        try:
+            error_json = json.loads(error_body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            error_json = {"error": error_body.decode("utf-8", errors="replace")}
+        return JSONResponse(
+            error_json,
+            status_code=status_code,
+            headers={"x-vllm-request-id": request_id, **_trace_headers()},
+        )
+
     async def generate():
         tracker = StreamLatencyTracker(request_start)
         first_token_recorded = False
-        status_code = 200
         try:
             with telemetry.upstream_span(request_id, path):
-                async with client.stream(
-                    "POST", path, headers=headers, content=body_bytes
-                ) as upstream:
-                    status_code = upstream.status_code
-                    async for line in upstream.aiter_lines():
-                        if not line:
-                            yield b"\n"
-                            continue
+                async for line in upstream.aiter_lines():
+                    if not line:
+                        yield b"\n"
+                        continue
 
-                        if line.startswith("data: ") and line != "data: [DONE]":
-                            if _parse_sse_content_line(line):
-                                now = time.monotonic()
-                                tracker.on_content_token(now)
-                                if not first_token_recorded:
-                                    first_token_recorded = True
-                                    ttft_ms = (now - request_start) * 1000.0
-                                    telemetry.record_first_token(span, ttft_ms)
-
-                        if line == "data: [DONE]":
+                    if line.startswith("data: ") and line != "data: [DONE]":
+                        if _parse_sse_content_line(line):
                             now = time.monotonic()
-                            snapshot = tracker.finalize(now)
-                            tbt_samples = tracker.prometheus_tbt_samples()
-                            telemetry.record_completion(
-                                span,
-                                ttft_ms=snapshot.ttft_ms,
-                                mean_tbt_ms=snapshot.mean_tbt_ms,
-                                p99_tbt_ms=snapshot.p99_tbt_ms,
-                                total_tokens=snapshot.total_tokens,
-                                e2e_ms=snapshot.e2e_ms,
-                            )
-                            yield (line + "\n").encode()
-                            for comment in snapshot.to_sse_comment_lines():
-                                yield f"{comment}\n".encode()
-                            _record_prometheus(snapshot, tbt_samples)
-                            _record_to_stats_sync(snapshot, request_id, model)
-                            REQUEST_COUNTER.labels(endpoint=path, status=str(status_code)).inc()
-                            continue
+                            tracker.on_content_token(now)
+                            if not first_token_recorded:
+                                first_token_recorded = True
+                                ttft_ms = (now - request_start) * 1000.0
+                                telemetry.record_first_token(span, ttft_ms)
 
+                    if line == "data: [DONE]":
+                        now = time.monotonic()
+                        snapshot = tracker.finalize(now)
+                        tbt_samples = tracker.prometheus_tbt_samples()
+                        telemetry.record_completion(
+                            span,
+                            ttft_ms=snapshot.ttft_ms,
+                            mean_tbt_ms=snapshot.mean_tbt_ms,
+                            p99_tbt_ms=snapshot.p99_tbt_ms,
+                            total_tokens=snapshot.total_tokens,
+                            e2e_ms=snapshot.e2e_ms,
+                        )
                         yield (line + "\n").encode()
+                        for comment in snapshot.to_sse_comment_lines():
+                            yield f"{comment}\n".encode()
+                        _record_prometheus(snapshot, tbt_samples)
+                        _record_to_stats_sync(snapshot, request_id, model)
+                        REQUEST_COUNTER.labels(endpoint=path, status=str(status_code)).inc()
+                        continue
+
+                    yield (line + "\n").encode()
         finally:
+            await upstream_ctx.__aexit__(None, None, None)
             ACTIVE_REQUESTS.dec()
 
     response_headers = {
@@ -465,6 +487,7 @@ async def _handle_streaming(
 
     return StreamingResponse(
         generate(),
+        status_code=status_code,
         headers=response_headers,
         media_type="text/event-stream",
     )

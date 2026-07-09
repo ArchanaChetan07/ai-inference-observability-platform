@@ -395,6 +395,7 @@ class TestStreamingProxy:
         mock_context = AsyncMock()
         mock_context.__aenter__ = AsyncMock(return_value=mock_context)
         mock_context.__aexit__ = AsyncMock(return_value=None)
+        mock_context.status_code = 200
         mock_context.aiter_lines = mock_aiter_lines
         mock_client.stream = MagicMock(return_value=mock_context)
         app.state.http_client = mock_client
@@ -428,6 +429,7 @@ class TestStreamingProxy:
         mock_context = AsyncMock()
         mock_context.__aenter__ = AsyncMock(return_value=mock_context)
         mock_context.__aexit__ = AsyncMock(return_value=None)
+        mock_context.status_code = 200
         mock_context.aiter_lines = mock_aiter_lines
         mock_client.stream = MagicMock(return_value=mock_context)
         app.state.http_client = mock_client

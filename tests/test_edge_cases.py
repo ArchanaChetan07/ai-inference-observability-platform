@@ -172,3 +172,33 @@ async def test_openai_usage_token_fields_unchanged():
     assert usage["prompt_tokens"] == 10
     assert usage["completion_tokens"] == 42
     assert usage["total_tokens"] == 52
+
+
+@pytest.mark.regression
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_streaming_request_propagates_upstream_error_status():
+    """Regression: a stream:true request that upstream rejects outright
+    (bad model name, invalid body, etc) must surface the real HTTP status
+    and error body — not a 200 with an opaque, non-SSE line and no latency
+    comments, which left every client (including this project's own chat
+    UI) unable to tell a rejected request from an empty successful one."""
+    error_payload = {"error": {"message": "The model `bad-model` does not exist."}}
+
+    mock_client = AsyncMock()
+    mock_context = AsyncMock()
+    mock_context.__aenter__ = AsyncMock(return_value=mock_context)
+    mock_context.__aexit__ = AsyncMock(return_value=None)
+    mock_context.status_code = 400
+    mock_context.aread = AsyncMock(return_value=json.dumps(error_payload).encode())
+    mock_client.stream = MagicMock(return_value=mock_context)
+    app.state.http_client = mock_client
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/v1/chat/completions",
+            json={"model": "bad-model", "messages": [], "stream": True},
+        )
+
+    assert resp.status_code == 400
+    assert resp.json() == error_payload
