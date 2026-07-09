@@ -30,7 +30,7 @@
 | | |
 |---|---|
 | **Hardware validated** | NVIDIA T1000 8 GB · `facebook/opt-1.3b` · XFORMERS backend |
-| **Proxy overhead** | +2% RPS · +109 ms TTFT P99 @ concurrency 5 ([measured 2026-07-09](#benchmarks)) |
+| **Proxy overhead** | −12% RPS · +125 ms TTFT P99 @ concurrency 5 ([measured 2026-07-09](#benchmarks)) |
 | **Deploy time** | ~2–5 min first run (model download) · `docker compose up` |
 | **Test coverage** | 51 automated tests · no GPU required for CI suite |
 | **Stack** | Docker Compose · Kubernetes · Helm · Prometheus · Grafana · OpenTelemetry |
@@ -307,6 +307,20 @@ sum(rate(vllm_proxy_requests_total{status="200"}[1m]))
 
 Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml) · Alertmanager: [`docker/alertmanager.yml`](docker/alertmanager.yml)
 
+### Grafana dashboard (live hardware)
+
+Captured after **437 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
+
+![Grafana dashboard showing TTFT p50/p95/p99, TBT p50/p99, requests/sec, active requests, and E2E latency p99 over a 30-minute window with sustained real traffic](docs/images/grafana-latency-dashboard.png)
+
+Open locally: `http://127.0.0.1:3000/d/vllm-latency-1a` (`admin` / `admin`)
+
+Generate demo traffic for recruiters / reviewers:
+
+```bash
+python scripts/generate_demo_traffic.py 6   # 90 streaming requests, varied prompts
+```
+
 ### OpenTelemetry (optional)
 
 ```bash
@@ -320,17 +334,17 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 
 ## Benchmarks
 
-**Environment:** NVIDIA T1000 8 GB · `facebook/opt-1.3b` · 100 max tokens · streaming · 50 requests/level  
+**Environment:** NVIDIA T1000 8 GB · `facebook/opt-1.3b` · 100 max tokens · streaming · 30 requests/level  
 **Date:** 2026-07-09 · **Artifacts:** [`benchmarks/results/`](benchmarks/results/)
 
 ### End-to-end: vLLM direct vs proxy
 
 | Concurrency | Endpoint | Req/s | TTFT P99 | Overhead |
 |:-----------:|----------|------:|---------:|---------:|
-| 1 | vLLM `:8000` | 0.11 | 188 ms | — |
-| 1 | Proxy `:8082` | 0.09 | 297 ms | −18% RPS · +109 ms P99 |
-| 5 | vLLM `:8000` | 0.46 | 875 ms | — |
-| 5 | Proxy `:8082` | 0.47 | 984 ms | +2% RPS · +109 ms P99 |
+| 1 | vLLM `:8000` | 0.09 | 188 ms | — |
+| 1 | Proxy `:8082` | 0.09 | 204 ms | 0% RPS · +16 ms P99 |
+| 5 | vLLM `:8000` | 0.43 | 766 ms | — |
+| 5 | Proxy `:8082` | 0.38 | 891 ms | −12% RPS · +125 ms P99 |
 
 GPU inference and vLLM batch scheduling dominate latency — proxy overhead is secondary at concurrency 5.
 

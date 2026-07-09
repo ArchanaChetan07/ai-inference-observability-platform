@@ -21,8 +21,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-DIRECT_JSON = Path("benchmarks/results/benchmark_20260709_122449.json")
-PROXY_JSON = Path("benchmarks/results/benchmark_20260709_121220.json")
+DIRECT_JSON = Path("benchmarks/results/benchmark_20260709_134247.json")
+PROXY_JSON = Path("benchmarks/results/benchmark_20260709_133535.json")
 OUT_DIR = Path("docs/images")
 
 STYLE = {
@@ -40,8 +40,8 @@ COLORS = {
     "e2e": "#7c8494",
 }
 SUBTITLE = (
-    "facebook/opt-1.3b · NVIDIA T1000 8GB · 100 max tokens · streaming · 50 req/level\n"
-    "source: benchmark_20260709_122449.json (direct) · _121220.json (proxy)"
+    "facebook/opt-1.3b · NVIDIA T1000 8GB · 100 max tokens · streaming · 30 req/level\n"
+    "source: benchmark_20260709_134247.json (direct) · _133535.json (proxy)"
 )
 
 
