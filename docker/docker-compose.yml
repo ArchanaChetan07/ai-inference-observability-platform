@@ -68,7 +68,7 @@ services:
       --gpu-memory-utilization ${GPU_MEM_UTIL:-0.85}
       --disable-log-requests
     healthcheck:
-      test: ["CMD", "python", "-c",
+      test: ["CMD", "python3", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s

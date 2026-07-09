@@ -32,7 +32,7 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 | | |
 |---|---|
 | **Deploy time** | ~2 minutes (Docker Compose, includes model download) |
-| **Proxy overhead** | ≤ 4% RPS · ≤ 31 ms TTFT P99 @ concurrency 5 |
+| **Proxy overhead** | +2% RPS · +109 ms TTFT P99 @ concurrency 5 (measured 2026-07-09) |
 | **Test coverage** | 51 automated tests (unit · integration · regression · concurrent) |
 | **Production stack** | Kubernetes · Helm · Prometheus · Grafana · Alertmanager · OpenTelemetry |
 | **Live demo** | Zero-build [chat UI](ui/) with per-token latency visualization (`ui/index.html`) |
@@ -41,7 +41,7 @@ Large language model serving is judged on **responsiveness** — how fast the fi
 
 ## See it working
 
-![Chat UI showing a streamed reply with a per-token latency trace: amber TTFT bar, cyan inter-token bars, and a badge row reading ttft 102ms · tbt 40ms · p99 tbt 58ms · tokens 25 · e2e 1.13s](ui/screenshots/chat-latency-trace.png)
+![Chat UI showing a streamed reply with a per-token latency trace: amber TTFT bar, cyan inter-token bars, and a badge row reading ttft 432ms · tbt 132ms · p99 tbt 135ms · tokens 121 · e2e 16.46s](ui/screenshots/chat-latency-trace.png)
 
 Every reply streams in with its **actual measured timing** rendered as a trace strip — amber for TTFT, cyan for the gap between each subsequent token, red for outliers. No build step: open [`ui/index.html`](ui/) directly against a running proxy. See [`ui/README.md`](ui/README.md) for details.
 
@@ -268,17 +268,17 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 
 ## Benchmarks
 
-**Environment:** NVIDIA T1000 8 GB · `facebook/opt-1.3b` · 30 tokens · streaming  
+**Environment:** NVIDIA T1000 8 GB · `facebook/opt-1.3b` · 100 max tokens · streaming · 50 requests/level  
 **Artifacts:** [`benchmarks/results/`](benchmarks/results/)
 
 ### End-to-end: vLLM direct vs proxy
 
 | Concurrency | Endpoint | Req/s | TTFT P99 | Overhead |
 |:-----------:|----------|------:|---------:|---------:|
-| 1 | vLLM `:8000` | 0.24 | 203 ms | — |
-| 1 | Proxy `:8082` | 0.23 | 203 ms | −4.2% RPS |
-| 5 | vLLM `:8000` | 1.03 | 813 ms | — |
-| 5 | Proxy `:8082` | 1.02 | 844 ms | +31 ms P99 |
+| 1 | vLLM `:8000` | 0.11 | 188 ms | — |
+| 1 | Proxy `:8082` | 0.09 | 297 ms | −18% RPS · +109 ms P99 |
+| 5 | vLLM `:8000` | 0.46 | 875 ms | — |
+| 5 | Proxy `:8082` | 0.47 | 984 ms | +2% RPS · +109 ms P99 |
 
 ![Bar charts comparing vLLM direct vs proxy: TTFT P99 in milliseconds and throughput in requests/sec, at concurrency 1 and 5, showing near-identical values between direct and proxied requests](docs/images/benchmark-overhead.png)
 

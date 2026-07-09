@@ -11,8 +11,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-direct = json.load(open("benchmarks/results/benchmark_20260629_110725.json"))["summaries"]
-proxy = json.load(open("benchmarks/results/benchmark_20260629_110852.json"))["summaries"]
+direct = json.load(open("benchmarks/results/benchmark_20260709_122449.json"))["summaries"]
+proxy = json.load(open("benchmarks/results/benchmark_20260709_121220.json"))["summaries"]
 
 concurrencies = [s["concurrency"] for s in direct]
 direct_ttft = [s["ttft_p99"] for s in direct]
@@ -70,8 +70,8 @@ ax2.spines[["top", "right"]].set_visible(False)
 ax2.legend(fontsize=8, frameon=False)
 
 fig.suptitle(
-    "facebook/opt-1.3b · NVIDIA T1000 8GB · 30 tokens/request · streaming\n"
-    "source: benchmarks/results/benchmark_20260629_110725.json (direct), _110852.json (proxy)",
+    "facebook/opt-1.3b · NVIDIA T1000 8GB · 100 max tokens/request · streaming\n"
+    "source: benchmarks/results/benchmark_20260709_122449.json (direct), _121220.json (proxy)",
     fontsize=7.5,
     y=1.03,
     color="#4d5567",
