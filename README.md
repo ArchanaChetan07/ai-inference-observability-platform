@@ -321,7 +321,7 @@ Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml) · Alertmanager: [
 
 Captured after **468 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
 
-![Grafana dashboard showing TTFT p50/p95/p99, TBT p50/p99, requests/sec, active requests, and E2E latency p99 over a 30-minute window with sustained real traffic](docs/images/grafana-latency-dashboard.png)
+![Grafana dashboard: TTFT p50/p95/p99, TBT p50/p99, requests/sec (200/400/started), active requests, and E2E latency p99 — live traffic on NVIDIA T1000 8 GB over ~1 hour](docs/images/grafana-latency-dashboard.png)
 
 Open locally: `http://127.0.0.1:3000/d/vllm-latency-1a/vllm-latency-metrics-e28094-project-1a` (`admin` / `admin`)
 
