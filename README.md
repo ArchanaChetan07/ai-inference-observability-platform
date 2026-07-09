@@ -17,7 +17,7 @@
 [![CI/CD](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml/badge.svg)](https://github.com/ArchanaChetan07/ai-inference-observability-platform/actions/workflows/main.yml)
 [![Tests](https://img.shields.io/badge/Tests-51_passing-success)](tests/)
 
-[Quick Start](#quick-start) · [Architecture](#architecture) · [Observability](#observability) · [Deployment](#production-deployment) · [Documentation](#documentation)
+[Overview](#overview) · [Latency model](#latency-model) · [Live demo](#live-demo) · [Architecture](#architecture) · [Observability](#observability) · [Benchmarks](#benchmarks) · [Quick start](#quick-start) · [Deployment](#production-deployment) · [Docs](#documentation)
 
 </div>
 
@@ -25,159 +25,177 @@
 
 ## Overview
 
-Large language model serving is judged on **responsiveness** — how fast the first token arrives (**TTFT**) and how smoothly tokens stream (**TBT**). [vLLM](https://github.com/vllm-project/vllm) optimizes GPU throughput internally, but its OpenAI-compatible API does not expose per-request latency to clients.
-
-**AI Inference Observability Platform** closes that gap with a transparent FastAPI proxy that wraps any vLLM endpoint and surfaces authoritative latency metrics — without modifying client code or forking vLLM.
+[vLLM](https://github.com/vllm-project/vllm) optimizes GPU throughput, but its OpenAI-compatible API does not expose **per-request latency** to clients. This platform adds a transparent FastAPI proxy that measures TTFT, TBT, and end-to-end latency at the HTTP boundary — without client changes or forking vLLM.
 
 | | |
 |---|---|
-| **Deploy time** | ~2 minutes (Docker Compose, includes model download) |
-| **Proxy overhead** | +2% RPS · +109 ms TTFT P99 @ concurrency 5 (measured 2026-07-09) |
-| **Test coverage** | 51 automated tests (unit · integration · regression · concurrent) |
-| **Production stack** | Kubernetes · Helm · Prometheus · Grafana · Alertmanager · OpenTelemetry |
-| **Live demo** | Zero-build [chat UI](ui/) with per-token latency visualization (`ui/index.html`) |
+| **Hardware validated** | NVIDIA T1000 8 GB · `facebook/opt-1.3b` · XFORMERS backend |
+| **Proxy overhead** | +2% RPS · +109 ms TTFT P99 @ concurrency 5 ([measured 2026-07-09](#benchmarks)) |
+| **Deploy time** | ~2–5 min first run (model download) · `docker compose up` |
+| **Test coverage** | 51 automated tests · no GPU required for CI suite |
+| **Stack** | Docker Compose · Kubernetes · Helm · Prometheus · Grafana · OpenTelemetry |
 
 ---
 
-## See it working
+## Latency model
 
-![Chat UI showing a streamed reply with a per-token latency trace: amber TTFT bar, cyan inter-token bars, and a badge row reading ttft 432ms · tbt 132ms · p99 tbt 135ms · tokens 121 · e2e 16.46s](ui/screenshots/chat-latency-trace.png)
+Three metrics, one measurement point — the proxy's HTTP boundary (client-authoritative):
 
-Every reply streams in with its **actual measured timing** rendered as a trace strip — amber for TTFT, cyan for the gap between each subsequent token, red for outliers. No build step: open [`ui/index.html`](ui/) directly against a running proxy. See [`ui/README.md`](ui/README.md) for details.
+```mermaid
+gantt
+    title Single streaming request timeline
+    dateFormat X
+    axisFormat %L ms
 
----
+    section Phases
+    TTFT (first token)           :active, ttft, 0, 442
+    Token 2                      :t2, after ttft, 138
+    Token 3                      :t3, after t2, 138
+    Remaining tokens (mean TBT)  :crit, gen, after t3, 4200
+    E2E (request complete)       :milestone, done, 4988, 0
+```
 
-## Why teams use this
+| Metric | Definition | Emitted via |
+|--------|------------|-------------|
+| **TTFT** | Request start → first content token | `x-vllm-ttft-ms` header · SSE comment · `usage.ttft_ms` |
+| **TBT** | Mean / P99 inter-token interval | `x-vllm-mean-tbt-ms` · `x-vllm-p99-tbt-ms` · `usage` fields |
+| **E2E** | Request start → stream complete | `x-vllm-e2e-latency-ms` · `usage.e2e_latency_ms` |
 
-| Challenge | How this platform solves it |
-|-----------|----------------------------|
-| No server-side TTFT/TBT in vLLM responses | Injects metrics into headers, `usage` fields, and SSE comments |
-| Inconsistent client-side timing | Single source of truth at the HTTP boundary |
-| No SLO dashboards out of the box | Prometheus histograms + Grafana dashboard + alert rules |
-| Hard to debug latency spikes | Optional OpenTelemetry traces with per-request breakdown |
-| Production deployment complexity | Modular K8s manifests, Helm chart, HPA, GPU scheduling |
-
----
-
-## Key features
-
-- **OpenAI-compatible** — `/v1/chat/completions` and `/v1/completions` with zero client changes
-- **Streaming-first** — SSE passthrough; latency comments after `data: [DONE]` (never blocks the terminal chunk)
-- **Three metric layers** — TTFT · mean/P99 TBT · end-to-end latency on every request
-- **Full observability** — Prometheus `/metrics` · Grafana dashboards · Alertmanager · OTLP traces (Jaeger / Tempo)
-- **Production-ready** — Docker Compose · Kustomize · Helm · HPA · PDB · NetworkPolicy · GPU node scheduling
-- **Security hardened** — multi-stage Docker · pinned apt/pip deps · non-root containers · CI vulnerability scanning
-- **Benchmarked** — reproducible E2E and micro-benchmark suite with published results
-- **Optional upstream patch** — annotated vLLM engine integration for GPU-authoritative measurement ([`vllm_patch/`](vllm_patch/))
+> **Note:** TTFT is measured at the proxy, not inside vLLM's scheduler. For GPU-authoritative timestamps, see [`vllm_patch/`](vllm_patch/).
 
 ---
 
-## Technology stack
+## Live demo
 
-| Layer | Technologies |
-|-------|-------------|
-| **Application** | Python 3.10+ · FastAPI · httpx · uvicorn · uvloop · SSE |
-| **Inference** | vLLM · NVIDIA GPU · HuggingFace models |
-| **Containers** | Docker · multi-stage builds · Docker Compose |
-| **Orchestration** | Kubernetes · Helm · Kustomize · HPA · PDB · NetworkPolicy |
-| **Observability** | Prometheus · Grafana · Alertmanager · OpenTelemetry · Jaeger |
-| **CI/CD** | GitHub Actions · GHCR · Ruff · mypy · Hadolint · pytest · Trivy · Cosign · kubeconform |
+Captured against a **live** stack on NVIDIA T1000 8 GB (`http://localhost:8082`, `facebook/opt-1.3b`) — not a mock server.
+
+![Chat UI with per-token latency trace: proxy ok · upstream ok, ttft 432ms · tbt 132ms · p99 tbt 135ms · tokens 121 · e2e 16.46s](ui/screenshots/chat-latency-trace.png)
+
+| UI element | Meaning |
+|------------|---------|
+| Amber bar | TTFT — time to first token |
+| Cyan bars | Inter-token gaps (one per token) |
+| Red bars | Outliers above P99 TBT |
+| Badge row | Measured values from SSE comments after `[DONE]` |
+
+Open [`ui/index.html`](ui/) in a browser — no build step. Set proxy URL to `http://localhost:8082` and model to `facebook/opt-1.3b`. Details: [`ui/README.md`](ui/README.md).
 
 ---
 
 ## Architecture
 
+### System topology
+
 ```mermaid
-flowchart LR
-    subgraph Clients
-        SDK[OpenAI SDK / curl / LangChain]
+flowchart TB
+    subgraph Clients["Clients"]
+        SDK[OpenAI SDK]
+        CURL[curl / httpx]
+        UI[ui/index.html]
     end
-    subgraph Platform
-        Proxy[Latency Proxy<br/>FastAPI]
-        Prom[Prometheus]
-        AM[Alertmanager]
-        Graf[Grafana]
-        OTel[OpenTelemetry]
+
+    subgraph Compose["Docker Compose stack"]
+        direction TB
+        PROXY["Latency Proxy :8082<br/>FastAPI · proxy.py"]
+        VLLM["vLLM :8000<br/>facebook/opt-1.3b"]
+        PROM[Prometheus :9090]
+        GRAF[Grafana :3000]
+        AM[Alertmanager :9093]
     end
-    subgraph Inference
-        VLLM[vLLM Server]
-        GPU[NVIDIA GPU]
+
+    subgraph GPU["Host"]
+        T1000[NVIDIA T1000 8GB]
     end
-    SDK --> Proxy
-    Proxy --> VLLM --> GPU
-    Proxy --> Prom --> AM
-    Prom --> Graf
-    Proxy -.-> OTel
+
+    SDK & CURL & UI --> PROXY
+    PROXY --> VLLM --> T1000
+    PROXY -->|/metrics scrape| PROM
+    PROM --> GRAF
+    PROM --> AM
+    PROXY -.->|OTEL optional| OTEL[(Jaeger / Tempo)]
 ```
 
-**Request flow (streaming):**
+### Streaming request flow
 
 ```mermaid
 sequenceDiagram
+    autonumber
     participant C as Client
     participant P as Proxy
     participant V as vLLM
+    participant M as Prometheus
 
     C->>P: POST /v1/chat/completions (stream: true)
-    P->>V: forward request
-    Note over P: t0 = request start
-    V-->>P: first token chunk
-    Note over P: TTFT = now − t0
-    P-->>C: data: {"delta": {"content": "..."}}
-    loop per token
-        V-->>P: next token chunk
-        P-->>C: forward immediately (no added latency)
+    P->>V: forward body unchanged
+    Note over P: t₀ = monotonic clock
+    V-->>P: SSE chunk (role)
+    V-->>P: SSE chunk (first content)
+    Note over P: TTFT = now − t₀
+    P-->>C: forward chunk immediately
+    loop each token
+        V-->>P: next chunk
+        P-->>C: forward (zero-copy passthrough)
     end
     V-->>P: data: [DONE]
     P-->>C: data: [DONE]
-    Note over P: finalize snapshot
-    P-->>C: : x-vllm-ttft-ms=...
-    P-->>C: : x-vllm-mean-tbt-ms=...
-    P-->>C: : x-vllm-p99-tbt-ms=...
-    P->>P: update Prometheus histograms
+    Note over P: finalize · reservoir P99
+    P-->>C: : x-vllm-ttft-ms=441.784
+    P-->>C: : x-vllm-mean-tbt-ms=138.008
+    P-->>C: : x-vllm-p99-tbt-ms=141.797
+    P->>M: histogram observe
 ```
 
-1. Client sends `POST /v1/chat/completions` to the proxy
-2. Proxy forwards transparently to vLLM and tracks token arrival timestamps
-3. Client receives SSE chunks in real time — no added latency on the hot path
-4. After `data: [DONE]`, proxy appends SSE comment lines with TTFT/TBT/E2E
-5. Prometheus histograms updated; optional OTLP trace exported
+### Observability data plane
+
+```mermaid
+flowchart LR
+    REQ[HTTP request] --> PROXY[Proxy]
+    PROXY --> HIST["Histograms<br/>ttft · tbt · e2e"]
+    PROXY --> CTR["Counter<br/>requests_total"]
+    PROXY --> GAU["Gauge<br/>active_requests"]
+    HIST & CTR & GAU --> PROM[/metrics endpoint/]
+    PROM --> SCRAPE[Prometheus scrape]
+    SCRAPE --> GRAF[Grafana dashboards]
+    SCRAPE --> ALERT[Alertmanager rules]
+    PROXY -.->|OTEL_ENABLED| TRACE[OTLP traces]
+```
 
 | Component | Role |
 |-----------|------|
-| [`proxy.py`](proxy.py) | Production FastAPI sidecar (v1.3) |
-| [`vllm_patch/latency_utils.py`](vllm_patch/latency_utils.py) | O(1) per-token tracker with reservoir P99 |
+| [`proxy.py`](proxy.py) | FastAPI sidecar — streaming passthrough + metric injection |
+| [`vllm_patch/latency_utils.py`](vllm_patch/latency_utils.py) | O(1) per-token tracker · reservoir P99 |
 | [`vllm_patch/telemetry.py`](vllm_patch/telemetry.py) | Optional OpenTelemetry OTLP export |
-| [`docker/`](docker/) | Multi-stage Dockerfile · Compose · Alertmanager · OTel overlay |
-| [`k8s/`](k8s/) · [`helm/`](helm/) | Production Kubernetes deployment |
-| [`monitoring/`](monitoring/) | Grafana dashboard · Prometheus alert rules |
-| [`.github/workflows/main.yml`](.github/workflows/main.yml) | CI/CD pipeline |
+| [`docker/`](docker/) | Multi-stage Dockerfile · Compose · Alertmanager |
+| [`k8s/`](k8s/) · [`helm/`](helm/) | Kubernetes manifests · Helm chart · HPA |
+| [`monitoring/`](monitoring/) | Grafana dashboard JSON · Prometheus alert rules |
 
-Full API reference: [`docs/API.md`](docs/API.md)
+API reference: [`docs/API.md`](docs/API.md)
 
 ---
 
 ## Example output
+
+Measured on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · streaming (2026-07-09).
+
+### Streaming — SSE comments (after `[DONE]`)
+
+```
+data: [DONE]
+: x-vllm-ttft-ms=441.784
+: x-vllm-e2e-latency-ms=4987.524
+: x-vllm-mean-tbt-ms=138.008
+: x-vllm-p99-tbt-ms=141.797
+: x-vllm-tokens-generated=33
+```
 
 ### Non-streaming — response headers
 
 ```http
 HTTP/1.1 200 OK
 x-vllm-request-id: req-a1b2c3d4
-x-vllm-ttft-ms: 342.1
-x-vllm-e2e-latency-ms: 1823.4
+x-vllm-ttft-ms: 281.0
+x-vllm-e2e-latency-ms: 14359.0
 Content-Type: application/json
-```
-
-### Streaming — SSE comments (after `[DONE]`)
-
-```
-data: [DONE]
-: x-vllm-ttft-ms=188.000
-: x-vllm-mean-tbt-ms=142.790
-: x-vllm-p99-tbt-ms=143.860
-: x-vllm-tokens-generated=32
-: x-vllm-e2e-latency-ms=4375.000
 ```
 
 ### Extended `usage` object
@@ -185,16 +203,39 @@ data: [DONE]
 ```json
 {
   "usage": {
-    "prompt_tokens": 12,
-    "completion_tokens": 32,
-    "total_tokens": 44,
-    "ttft_ms": 188.0,
-    "mean_tbt_ms": 142.79,
-    "p99_tbt_ms": 143.86,
-    "e2e_latency_ms": 4375.0
+    "prompt_tokens": 9,
+    "completion_tokens": 33,
+    "total_tokens": 42,
+    "ttft_ms": 441.78,
+    "mean_tbt_ms": 138.01,
+    "p99_tbt_ms": 141.80,
+    "e2e_latency_ms": 4987.52
   }
 }
 ```
+
+---
+
+## Capabilities
+
+| Area | Details |
+|------|---------|
+| **API** | OpenAI-compatible `/v1/chat/completions` · `/v1/completions` — zero client changes |
+| **Streaming** | SSE passthrough; metrics as comments after `[DONE]` (never blocks terminal chunk) |
+| **Metrics** | TTFT · mean/P99 TBT · E2E on every request (headers · `usage` · SSE) |
+| **Observability** | Prometheus histograms · Grafana dashboard · Alertmanager · optional OTLP |
+| **Deploy** | Docker Compose · Kustomize · Helm · HPA · PDB · NetworkPolicy |
+| **Security** | Multi-stage Docker · pinned deps · non-root containers · CI scanning (Trivy · Bandit) |
+| **Upstream** | Annotated [`vllm_patch/`](vllm_patch/) for GPU-authoritative measurement |
+
+### Technology stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Application** | Python 3.10+ · FastAPI · httpx · uvicorn · uvloop |
+| **Inference** | vLLM · NVIDIA GPU · HuggingFace |
+| **Observability** | Prometheus · Grafana · Alertmanager · OpenTelemetry |
+| **CI/CD** | GitHub Actions · GHCR · Ruff · mypy · pytest · Cosign |
 
 ---
 
@@ -238,6 +279,17 @@ curl -N http://localhost:8082/v1/chat/completions \
 
 ## Observability
 
+```mermaid
+flowchart TB
+    PROXY[Proxy per request]
+    PROXY --> HDR[Response headers<br/>x-vllm-ttft-ms · x-vllm-e2e-latency-ms]
+    PROXY --> USG[usage JSON<br/>ttft_ms · mean_tbt_ms · p99_tbt_ms]
+    PROXY --> SSE[SSE comments<br/>after data: DONE]
+    PROXY --> PROM[Prometheus histograms<br/>/metrics scrape]
+    PROM --> GRAF2[Grafana dashboards]
+    PROM --> ALRT[Alertmanager rules]
+```
+
 ### Prometheus metrics
 
 | Metric | Type | Description |
@@ -269,7 +321,7 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 ## Benchmarks
 
 **Environment:** NVIDIA T1000 8 GB · `facebook/opt-1.3b` · 100 max tokens · streaming · 50 requests/level  
-**Artifacts:** [`benchmarks/results/`](benchmarks/results/)
+**Date:** 2026-07-09 · **Artifacts:** [`benchmarks/results/`](benchmarks/results/)
 
 ### End-to-end: vLLM direct vs proxy
 
@@ -280,14 +332,32 @@ Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 | 5 | vLLM `:8000` | 0.46 | 875 ms | — |
 | 5 | Proxy `:8082` | 0.47 | 984 ms | +2% RPS · +109 ms P99 |
 
-![Bar charts comparing vLLM direct vs proxy: TTFT P99 in milliseconds and throughput in requests/sec, at concurrency 1 and 5, showing near-identical values between direct and proxied requests](docs/images/benchmark-overhead.png)
+GPU inference and vLLM batch scheduling dominate latency — proxy overhead is secondary at concurrency 5.
 
-**Conclusion:** GPU inference and vLLM batch scheduling dominate latency — not proxy overhead.
+### Charts (live hardware run)
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/benchmark-overhead.png" alt="TTFT P99 and throughput: vLLM direct vs proxy at concurrency 1 and 5" /></td>
+<td width="33%"><img src="docs/images/benchmark-ttft-percentiles.png" alt="TTFT P50 P95 P99 spread at concurrency 1 for direct and proxy" /></td>
+<td width="33%"><img src="docs/images/benchmark-ttft-distribution.png" alt="Histogram of 50 proxy TTFT samples at concurrency 1" /></td>
+</tr>
+<tr>
+<td align="center"><sub>Overhead · RPS + TTFT P99</sub></td>
+<td align="center"><sub>Percentile spread @ c=1</sub></td>
+<td align="center"><sub>TTFT distribution (n=50)</sub></td>
+</tr>
+</table>
 
 ```bash
+# Proxy (with metrics)
 python benchmarks/run_benchmark.py --base-url http://localhost:8082 --concurrency 1 5
+
+# vLLM direct (baseline)
+python benchmarks/run_benchmark.py --base-url http://localhost:8000 --concurrency 1 5
+
 python benchmarks/perf_review.py
-python scripts/generate_benchmark_chart.py   # regenerate the chart above from results/
+python scripts/generate_benchmark_chart.py   # regenerate charts above
 ```
 
 ---
