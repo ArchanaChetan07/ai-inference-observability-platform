@@ -39,7 +39,7 @@
 
 | Metric | Value | Source |
 |--------|------:|--------|
-| Successful proxy requests | **468** | Prometheus `vllm_proxy_requests_total{status="200"}` |
+| Successful proxy requests | **498** | Prometheus `vllm_proxy_requests_total{status="200"}` |
 | TTFT p50 (live stream) | **456 ms** | SSE comment on sample request |
 | TTFT P99 @ c=5 (benchmark) | **891 ms** proxy · **766 ms** direct | [`benchmark_20260709_133535.json`](benchmarks/results/benchmark_20260709_133535.json) |
 | Proxy overhead @ c=5 | **−12% RPS · +125 ms P99** | Direct vs proxied benchmark |
@@ -281,7 +281,7 @@ curl -N http://localhost:8082/v1/chat/completions \
 |---------|-----|---------|
 | **Proxy** (use this) | http://localhost:8082 | OpenAI API + latency metrics |
 | vLLM (raw) | http://localhost:8000 | Upstream inference server |
-| Prometheus | http://localhost:9090 | Metrics collection |
+| Prometheus | http://127.0.0.1:9090 | Metrics collection — use `127.0.0.1`, not `localhost` (Windows/WSL2 IPv6 can hit a different instance) |
 | Alertmanager | http://localhost:9093 | Alert routing |
 | Grafana | http://127.0.0.1:3000 | Dashboards (`admin` / `admin`) — use `127.0.0.1`, not `localhost` |
 
