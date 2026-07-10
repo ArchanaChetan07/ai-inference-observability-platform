@@ -45,7 +45,9 @@ Use **both**: Prometheus for SLOs and alerts; traces for investigating latency s
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.otel.yml up -d --build
 ```
 
-Open Jaeger UI: http://localhost:16686
+Open Jaeger UI: http://127.0.0.1:16686
+
+![Jaeger trace waterfall for a live streaming inference request](images/jaeger-inference-trace.png)
 
 Send a streaming request:
 

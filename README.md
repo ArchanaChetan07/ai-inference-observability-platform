@@ -284,6 +284,7 @@ curl -N http://localhost:8082/v1/chat/completions \
 | Prometheus | http://127.0.0.1:9090 | Metrics collection — use `127.0.0.1`, not `localhost` (Windows/WSL2 IPv6 can hit a different instance) |
 | Alertmanager | http://localhost:9093 | Alert routing |
 | Grafana | http://127.0.0.1:3000 | Dashboards (`admin` / `admin`) — use `127.0.0.1`, not `localhost` |
+| Jaeger (OTEL) | http://127.0.0.1:16686 | Distributed traces — enable with `docker-compose.otel.yml` overlay |
 
 ---
 
@@ -319,7 +320,7 @@ Alert rules: [`monitoring/alerts.yml`](monitoring/alerts.yml) · Alertmanager: [
 
 ### Grafana dashboard (live hardware)
 
-Captured after **468 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
+Captured after **498 successful requests** on NVIDIA T1000 8 GB · `facebook/opt-1.3b` · proxy `:8082`.
 
 ![Grafana dashboard: TTFT p50/p95/p99, TBT p50/p99, requests/sec (200/400/started), active requests, and E2E latency p99 — live traffic on NVIDIA T1000 8 GB over ~1 hour](docs/images/grafana-latency-dashboard.png)
 
@@ -331,14 +332,26 @@ Generate demo traffic for recruiters / reviewers:
 python scripts/generate_demo_traffic.py 6   # 90 streaming requests, varied prompts
 ```
 
-### OpenTelemetry (optional)
+### OpenTelemetry — distributed tracing (optional)
+
+Complements Prometheus with **per-request** latency waterfalls. Each streaming completion exports `inference.request` → `vllm.upstream` spans via OTLP; responses include `x-trace-id` / `x-span-id` headers.
 
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.otel.yml up -d --build
-# Jaeger UI: http://localhost:16686
+# Jaeger UI: http://127.0.0.1:16686
 ```
 
-Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
+![Jaeger trace: vllm-latency-proxy POST /v1/chat/completions — 4.32s duration, 65 spans, inference.request (52.5 ms) with nested vllm.upstream (4.27s) showing per-token streaming on NVIDIA T1000 8 GB](docs/images/jaeger-inference-trace.png)
+
+Captured from a **live** streaming request on NVIDIA T1000 8 GB · trace `41d93ed6fba3b23040eed071c637bc15`.
+
+| Span | Duration | Attributes |
+|------|----------|------------|
+| `inference.request` | 52.5 ms | `request.id`, `llm.model`, `llm.streaming` |
+| `vllm.upstream` | 4.27 s | `request.id`, `http.route` |
+| Events | — | `first_token` (ttft_ms), `completion` (full breakdown) |
+
+Search traces: `http://127.0.0.1:16686/search?service=vllm-latency-proxy` · Details: [`docs/opentelemetry.md`](docs/opentelemetry.md)
 
 ---
 
