@@ -9,6 +9,19 @@
 
 ---
 
+## Results
+
+| Metric | Verified result | Source |
+|--------|-----------------|--------|
+| Test pass rate | **100% (51/51 passing)** | `pytest tests/` |
+| 2,048-token finalize P99 overhead | **46.1 μs before → 20.1 μs after (56% reduction)** | [`perf_review.json`](benchmarks/results/perf_review.json) |
+| SSE role fast-path throughput | **669.8255640266162 → 2030.8362171207616 ops/sec (~3×)** | [`perf_review.json`](benchmarks/results/perf_review.json) |
+| TTFT @ concurrency 1 | **p50 172.0 ms · p99 188.0 ms** | [`benchmark_20260709_134247.md`](benchmarks/results/benchmark_20260709_134247.md) |
+| TTFT @ concurrency 5 | **p50 266.0 ms · p99 766.0 ms** | [`benchmark_20260709_134247.md`](benchmarks/results/benchmark_20260709_134247.md) |
+| Error rate | **0.0% @ concurrency 1 · 0.0% @ concurrency 5** | [`benchmark_20260709_134247.md`](benchmarks/results/benchmark_20260709_134247.md) |
+
+---
+
 ## Overview
 
 vLLM optimizes GPU throughput but its OpenAI-compatible API does not give clients first-class per-request latency SLIs.
